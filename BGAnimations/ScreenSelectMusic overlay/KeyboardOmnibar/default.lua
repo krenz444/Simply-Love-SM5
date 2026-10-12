@@ -850,12 +850,12 @@ local modal = Def.ActorFrame {
 		end,
 	},
 
-	-- "SEARCH:" label
+	-- "SEARCH:" label (cleanly spaced, no overlap)
 	LoadFont("Common Bold") .. {
 		InitCommand = function(self)
 			self:xy(-boxWidth / 2 + 20, -boxHeight / 2 + 25)
 			self:horizalign(left)
-			self:zoom(0.68)
+			self:zoom(0.55)
 			self:diffuse(GetCurrentColor())
 			self:settext("SEARCH:")
 		end,
@@ -864,19 +864,21 @@ local modal = Def.ActorFrame {
 		end,
 	},
 
-	-- Search input box frame quad
+	-- Search input box frame quad (positioned cleanly to the right of SEARCH:)
 	Def.Quad {
 		InitCommand = function(self)
-			local inputW = IsUsingWideScreen() and 290 or 195
-			self:xy(-boxWidth / 2 + 125 + inputW / 2, -boxHeight / 2 + 25)
+			local inputStartX = IsUsingWideScreen() and (-boxWidth / 2 + 165) or (-boxWidth / 2 + 155)
+			local inputW = IsUsingWideScreen() and 380 or 280
+			self:xy(inputStartX + inputW / 2, -boxHeight / 2 + 25)
 			self:zoomto(inputW + 2, 28)
 			self:diffuse(color("0.22, 0.26, 0.35, 0.70"))
 		end,
 	},
 	Def.Quad {
 		InitCommand = function(self)
-			local inputW = IsUsingWideScreen() and 290 or 195
-			self:xy(-boxWidth / 2 + 125 + inputW / 2, -boxHeight / 2 + 25)
+			local inputStartX = IsUsingWideScreen() and (-boxWidth / 2 + 165) or (-boxWidth / 2 + 155)
+			local inputW = IsUsingWideScreen() and 380 or 280
+			self:xy(inputStartX + inputW / 2, -boxHeight / 2 + 25)
 			self:zoomto(inputW, 26)
 			self:diffuse(color("0.04, 0.05, 0.07, 0.96"))
 		end,
@@ -886,12 +888,13 @@ local modal = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		Name = "PlaceholderText",
 		InitCommand = function(self)
-			local inputW = IsUsingWideScreen() and 290 or 195
+			local inputStartX = IsUsingWideScreen() and (-boxWidth / 2 + 165) or (-boxWidth / 2 + 155)
+			local inputW = IsUsingWideScreen() and 380 or 280
 			placeholderTextActor = self
-			self:xy(-boxWidth / 2 + 135, -boxHeight / 2 + 25)
+			self:xy(inputStartX + 10, -boxHeight / 2 + 25)
 			self:horizalign(left)
-			self:zoom(0.62)
-			self:maxwidth((inputW - 15) / 0.62)
+			self:zoom(0.60)
+			self:maxwidth((inputW - 20) / 0.60)
 			self:diffuse(color("#556677"))
 			self:settext("Type song, artist, pack, or diff (d:10)...")
 		end,
@@ -901,12 +904,13 @@ local modal = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		Name = "QueryText",
 		InitCommand = function(self)
-			local inputW = IsUsingWideScreen() and 290 or 195
+			local inputStartX = IsUsingWideScreen() and (-boxWidth / 2 + 165) or (-boxWidth / 2 + 155)
+			local inputW = IsUsingWideScreen() and 380 or 280
 			queryTextActor = self
-			self:xy(-boxWidth / 2 + 135, -boxHeight / 2 + 25)
+			self:xy(inputStartX + 10, -boxHeight / 2 + 25)
 			self:horizalign(left)
-			self:zoom(0.75)
-			self:maxwidth((inputW - 15) / 0.75)
+			self:zoom(0.72)
+			self:maxwidth((inputW - 20) / 0.72)
 			self:diffuse(Color.White)
 			self:settext("")
 		end,
