@@ -24,9 +24,9 @@ local af = Def.ActorFrame {
 -- Positioned at y = 16, directly above the MusicWheel column.
 -- Completely above y = 32 so it NEVER collides with any wheel items.
 -- -------------------------------------------------------------
-local topPillX = IsUsingWideScreen() and (_screen.cx + 165) or (_screen.cx + 125)
-local topPillW = IsUsingWideScreen() and 230 or 185
-local topPillH = 22
+local topPillX = IsUsingWideScreen() and (_screen.cx + 168) or (_screen.cx + 125)
+local topPillW = IsUsingWideScreen() and 264 or 205
+local topPillH = 26
 
 local topPill = Def.ActorFrame {
 	Name = "HeaderSearchPill",
@@ -49,17 +49,17 @@ local topPill = Def.ActorFrame {
 	Def.Quad {
 		InitCommand = function(self)
 			self:zoomto(topPillW, topPillH)
-			self:diffuse(color("0.04, 0.05, 0.08, 1.0"))
+			self:diffuse(color("0.05, 0.06, 0.09, 1.0"))
 		end,
 	},
 
-	-- Left search prompt text
+	-- Left search prompt text (larger, high contrast)
 	LoadFont("Common Normal") .. {
 		Name = "SearchPrompt",
 		InitCommand = function(self)
-			self:x(-topPillW / 2 + 10)
+			self:x(-topPillW / 2 + 12)
 			self:horizalign(left)
-			self:zoom(0.52)
+			self:zoom(0.64)
 			self:diffuse(Color.White)
 			self:settext("[ / ] Type to Search")
 		end,
@@ -69,9 +69,9 @@ local topPill = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		Name = "LayoutBadge",
 		InitCommand = function(self)
-			self:x(topPillW / 2 - 8)
+			self:x(topPillW / 2 - 10)
 			self:horizalign(right)
-			self:zoom(0.50)
+			self:zoom(0.56)
 			self:playcommand("RefreshLayout")
 		end,
 		RefreshLayoutCommand = function(self)
