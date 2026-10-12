@@ -148,7 +148,13 @@ af[#af+1] = Def.ActorFrame{
 	LoadFont("Common Normal")..{
 		InitCommand=function(self) self:align(0,0):xy(_w-130 + 5, 10) end,
 		SetCommand=function(self)
-			if MusicWheel == nil then MusicWheel = SCREENMAN:GetTopScreen():GetMusicWheel() end
+			if MusicWheel == nil then
+				local top = SCREENMAN:GetTopScreen()
+				if top and top.GetMusicWheel then
+					MusicWheel = top:GetMusicWheel()
+				end
+			end
+			if not MusicWheel then return end
 
 			SelectedType = MusicWheel:GetSelectedType()
 			local seconds
