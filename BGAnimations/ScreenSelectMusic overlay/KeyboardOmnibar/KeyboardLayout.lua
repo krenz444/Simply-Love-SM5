@@ -89,7 +89,7 @@ local layouts = {
 	},
 }
 
-local layoutOrder = { "windows_auto", "qwerty", "colemak", "colemak-dh" }
+local layoutOrder = { "qwerty", "colemak", "colemak-dh", "windows_auto" }
 local activeLayoutId = nil
 
 local function LoadWindowsLayout()
@@ -110,8 +110,6 @@ end
 local winDef = LoadWindowsLayout()
 if winDef then
 	layouts["windows_auto"] = winDef
-else
-	layoutOrder = { "qwerty", "colemak", "colemak-dh" }
 end
 
 -- Key mapping table for raw device buttons to characters
@@ -176,11 +174,18 @@ function KeyboardLayout.ReloadWindowsLayout()
 	local freshWin = LoadWindowsLayout()
 	if freshWin then
 		layouts["windows_auto"] = freshWin
-		if layoutOrder[1] ~= "windows_auto" then
-			table.insert(layoutOrder, 1, "windows_auto")
+	end
+
+	-- 1. Check ThemePrefs (the in-game UI setting)
+	if type(ThemePrefs) == "table" and type(ThemePrefs.Get) == "function" then
+		local pref = ThemePrefs.Get("KeyboardLayout")
+		if pref and layouts[pref] then
+			activeLayoutId = pref
+			return activeLayoutId
 		end
 	end
 
+	-- 2. Fall back to Save/KeyboardLayout.txt if set
 	if FILEMAN:DoesFileExist(layoutFile) then
 		local text = lua.ReadFile(layoutFile) or ""
 		local clean = text:gsub("^%s*(.-)%s*$", "%1"):lower()
@@ -190,11 +195,8 @@ function KeyboardLayout.ReloadWindowsLayout()
 		end
 	end
 
-	if layouts["windows_auto"] then
-		activeLayoutId = "windows_auto"
-	else
-		activeLayoutId = "qwerty"
-	end
+	-- 3. Default to QWERTY for standard players
+	activeLayoutId = "qwerty"
 	return activeLayoutId
 end
 
@@ -206,6 +208,16 @@ end
 function KeyboardLayout.SetLayout(id)
 	if not layouts[id] then return end
 	activeLayoutId = id
+
+	-- Update ThemePrefs if available
+	if type(ThemePrefs) == "table" and type(ThemePrefs.Set) == "function" then
+		ThemePrefs.Set("KeyboardLayout", id)
+		if ThemePrefs.Save then
+			ThemePrefs.Save()
+		end
+	end
+
+	-- Keep Save/KeyboardLayout.txt in sync
 	local file = RageFileUtil.CreateRageFile()
 	if file:Open(layoutFile, 2) then
 		file:Write(activeLayoutId .. "\n")

@@ -161,9 +161,11 @@ foreach ($dir in $targetDirs) {
     $outPath = Join-Path $dir "WindowsKeyboardLayout.lua"
     [System.IO.File]::WriteAllText($outPath, $content, [System.Text.Encoding]::UTF8)
     
-    # Also ensure KeyboardLayout.txt is set to windows_auto
+    # Only write default KeyboardLayout.txt if it does not already exist
     $layoutTxt = Join-Path $dir "KeyboardLayout.txt"
-    [System.IO.File]::WriteAllText($layoutTxt, "windows_auto`n", [System.Text.Encoding]::UTF8)
+    if (-not (Test-Path $layoutTxt)) {
+        [System.IO.File]::WriteAllText($layoutTxt, "qwerty`n", [System.Text.Encoding]::UTF8)
+    }
     
     if (-not $Quiet) {
         Write-Host "[EXPORTED] -> $outPath"
