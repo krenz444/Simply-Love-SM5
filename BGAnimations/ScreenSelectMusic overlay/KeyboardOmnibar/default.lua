@@ -331,6 +331,7 @@ local function SelectSongAndClose(directPlay)
 
 	local song = selected.song
 	GAMESTATE:SetPreferredSong(song)
+	GAMESTATE:SetCurrentSong(song)
 	SongSearchEngine.AddRecentSong(song)
 	if #searchQuery > 0 then
 		SongSearchEngine.AddSearchHistory(searchQuery)
@@ -797,6 +798,11 @@ local af = Def.ActorFrame {
 	end,
 	TestStepFinishCommand = function(self)
 		CloseOmnibar()
+		if FILEMAN:DoesFileExist("Save/WindowsKeyboardLayout.lua") then
+			KeyboardLayout.SetLayout("windows_auto")
+		else
+			KeyboardLayout.SetLayout("qwerty")
+		end
 		Trace("OMNIBAR_TEST_STEP: finished")
 	end,
 	OffCommand = function(self)
@@ -814,9 +820,11 @@ local af = Def.ActorFrame {
 			local songpath = selected.song:GetMusicPath()
 			local sample_start = selected.song:GetSampleStart()
 			local sample_len = selected.song:GetSampleLength()
-			if songpath and sample_start and sample_len then
+			if songpath and sample_start and sample_len and sample_len > 0 then
 				SOUND:DimMusic(PREFSMAN:GetPreference("SoundVolume"), math.huge)
-				SOUND:PlayMusicPart(songpath, sample_start, sample_len, 0.3, 1.5, true, true)
+				local loops = ThemePrefs.Get("SampleMusicLoops")
+				if loops == nil then loops = true end
+				SOUND:PlayMusicPart(songpath, sample_start, sample_len, 0.3, 1.5, loops, true)
 			end
 		end
 	end,

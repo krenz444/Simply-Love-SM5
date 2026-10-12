@@ -24,8 +24,8 @@ local af = Def.ActorFrame {
 -- Positioned at y = 16, directly above the MusicWheel column.
 -- Completely above y = 32 so it NEVER collides with any wheel items.
 -- -------------------------------------------------------------
-local topPillX = IsUsingWideScreen() and (_screen.cx + 168) or (_screen.cx + 125)
-local topPillW = IsUsingWideScreen() and 264 or 205
+local topPillX = IsUsingWideScreen() and (_screen.cx + 185) or (_screen.cx + 135)
+local topPillW = IsUsingWideScreen() and 230 or 160
 local topPillH = 32
 
 local topPill = Def.ActorFrame {
@@ -71,7 +71,7 @@ local topPill = Def.ActorFrame {
 		InitCommand = function(self)
 			self:x(0)
 			self:horizalign(center)
-			self:zoom(0.70)
+			self:zoom(IsUsingWideScreen() and 0.68 or 0.55)
 			self:diffuse(Color.White)
 			self:settext("[ / ] Type to Search")
 		end,
@@ -83,19 +83,19 @@ af[#af + 1] = topPill
 -- -------------------------------------------------------------
 -- 2. Bottom Footer Hotkey Legend (Docked cleanly inside footer chrome)
 -- Positioned at y = _screen.h - 16, right of EVENT MODE.
--- Zero overlap with any gameplay panes or wheel graphics.
+-- Matches Simply Love's native Common Footer typography with zero screen-edge clipping.
 -- -------------------------------------------------------------
-local bottomX = IsUsingWideScreen() and (_screen.cx + 170) or (_screen.cx + 125)
+local bottomX = IsUsingWideScreen() and (_screen.cx + 165) or (_screen.cx + 120)
 
 local bottomLegend = Def.ActorFrame {
 	Name = "FooterHotkeyLegend",
 	InitCommand = function(self)
-		self:xy(bottomX, _screen.h - 16)
+		self:xy(bottomX, _screen.h - 18)
 	end,
 
 	LoadFont("Common Normal") .. {
 		InitCommand = function(self)
-			self:zoom(0.48)
+			self:zoom(0.44)
 			self:diffuse(color("#ddeeff"))
 			self:shadowlength(0.2)
 			self:settext("[ [ / ] ] Skip Pack   |   [ 1-5 ] Diff   |   [ S ] Sort")
