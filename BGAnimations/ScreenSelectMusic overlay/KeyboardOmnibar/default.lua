@@ -266,6 +266,7 @@ end
 local function OpenOmnibar(initialChar)
 	if isOpen then return end
 	isOpen = true
+	KeyboardLayout.ReloadWindowsLayout()
 	historyIndex = 0
 	typedQueryBeforeHistory = ""
 	searchQuery = initialChar or ""

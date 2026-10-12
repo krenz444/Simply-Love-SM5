@@ -1,9 +1,11 @@
 # sync_keyboard_layout.ps1
 # Pure PowerShell Win32 layout synchronizer for ITGmania / Simply Love.
-# Works out-of-the-box on standard Windows machines without requiring Python.
+# Detects active Windows keyboard layout and generates Save/WindowsKeyboardLayout.lua
 
 param(
-    [string]$SaveDir = "Save"
+    [string]$SaveDir = "",
+    [string]$ForceLayout = "",
+    [switch]$Quiet
 )
 
 $win32 = @"
@@ -13,6 +15,8 @@ public class WinKeyboard {
     [DllImport("user32.dll")]
     public static extern IntPtr GetKeyboardLayout(uint idThread);
     [DllImport("user32.dll")]
+    public static extern IntPtr LoadKeyboardLayoutW(string pwszKLID, uint Flags);
+    [DllImport("user32.dll")]
     public static extern uint MapVirtualKeyExW(uint uCode, uint uMapType, IntPtr dwhkl);
     [DllImport("user32.dll")]
     public static extern int ToUnicodeEx(uint wVirtKey, uint wScanCode, byte[] lpKeyState, [Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pwszBuff, int cchBuff, uint wFlags, IntPtr dwhkl);
@@ -21,7 +25,9 @@ public class WinKeyboard {
 }
 "@
 
-Add-Type -TypeDefinition $win32
+if (-not ([System.Management.Automation.PSTypeName]'WinKeyboard').Type) {
+    Add-Type -TypeDefinition $win32
+}
 
 $scancodes = @{
     'DeviceButton_q' = 0x10; 'DeviceButton_w' = 0x11; 'DeviceButton_e' = 0x12; 'DeviceButton_r' = 0x13;
@@ -43,10 +49,22 @@ $scancodes = @{
     'DeviceButton_9' = 0x0A; 'DeviceButton_0' = 0x0B;
 }
 
+# Determine layout code and handle
 $hkl = [WinKeyboard]::GetKeyboardLayout(0)
 $klidBuf = New-Object System.Text.StringBuilder 16
 [void][WinKeyboard]::GetKeyboardLayoutNameW($klidBuf)
 $layoutCode = $klidBuf.ToString()
+
+if ($ForceLayout) {
+    if ($ForceLayout -match '^[0-9a-fA-F]{8}$') {
+        $layoutCode = $ForceLayout
+    } elseif ($ForceLayout -eq 'colemak') {
+        $layoutCode = '00060409'
+    } elseif ($ForceLayout -eq 'qwerty') {
+        $layoutCode = '00000409'
+    }
+    $hkl = [WinKeyboard]::LoadKeyboardLayoutW($layoutCode, 1)
+}
 
 $layoutName = "Windows ($layoutCode)"
 try {
@@ -55,7 +73,9 @@ try {
     if ($regText) { $layoutName = $regText }
 } catch {}
 
-Write-Host "[WINDOWS LAYOUT] Code: $layoutCode | Name: $layoutName"
+if (-not $Quiet) {
+    Write-Host "[WINDOWS LAYOUT] Code: $layoutCode | Name: $layoutName"
+}
 
 function Get-CharMapping([uint32]$sc, [bool]$shift) {
     $vk = [WinKeyboard]::MapVirtualKeyExW($sc, 1, $hkl)
@@ -105,10 +125,47 @@ foreach ($btn in $sortedKeys) {
 $lines.Add("    },")
 $lines.Add("}")
 
-if (-not (Test-Path $SaveDir)) {
-    New-Item -ItemType Directory -Force -Path $SaveDir | Out-Null
+$content = ($lines -join "`n") + "`n"
+
+# Resolve target Save directories
+$targetDirs = @()
+if ($SaveDir) {
+    $targetDirs += $SaveDir
+} else {
+    # Check parent trees for Save folder
+    $possibleRoots = @(
+        $PSScriptRoot,
+        (Join-Path $PSScriptRoot ".."),
+        (Join-Path $PSScriptRoot "..\.."),
+        (Join-Path $PSScriptRoot "..\..\..")
+    )
+    foreach ($r in $possibleRoots) {
+        $candidate = Join-Path $r "Save"
+        if (Test-Path $candidate) {
+            $full = (Resolve-Path $candidate).Path
+            if ($targetDirs -notcontains $full) { $targetDirs += $full }
+        }
+    }
+    # Also check AppData
+    $appDataSave = Join-Path $env:APPDATA "ITGmania\Save"
+    if (Test-Path $appDataSave) {
+        $fullApp = (Resolve-Path $appDataSave).Path
+        if ($targetDirs -notcontains $fullApp) { $targetDirs += $fullApp }
+    }
 }
 
-$outPath = Join-Path $SaveDir "WindowsKeyboardLayout.lua"
-[System.IO.File]::WriteAllText($outPath, ($lines -join "`n") + "`n", [System.Text.Encoding]::UTF8)
-Write-Host "[EXPORTED] -> $outPath"
+foreach ($dir in $targetDirs) {
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    }
+    $outPath = Join-Path $dir "WindowsKeyboardLayout.lua"
+    [System.IO.File]::WriteAllText($outPath, $content, [System.Text.Encoding]::UTF8)
+    
+    # Also ensure KeyboardLayout.txt is set to windows_auto
+    $layoutTxt = Join-Path $dir "KeyboardLayout.txt"
+    [System.IO.File]::WriteAllText($layoutTxt, "windows_auto`n", [System.Text.Encoding]::UTF8)
+    
+    if (-not $Quiet) {
+        Write-Host "[EXPORTED] -> $outPath"
+    }
+}

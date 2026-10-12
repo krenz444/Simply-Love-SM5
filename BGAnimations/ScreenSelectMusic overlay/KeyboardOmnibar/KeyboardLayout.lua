@@ -172,16 +172,12 @@ local shiftCharMap = {
 	["`"] = "~",
 }
 
-function KeyboardLayout.GetLayout()
-	if activeLayoutId then return activeLayoutId end
-	-- Recheck for Windows layout dynamically
-	if not layouts["windows_auto"] then
-		local freshWin = LoadWindowsLayout()
-		if freshWin then
-			layouts["windows_auto"] = freshWin
-			if layoutOrder[1] ~= "windows_auto" then
-				table.insert(layoutOrder, 1, "windows_auto")
-			end
+function KeyboardLayout.ReloadWindowsLayout()
+	local freshWin = LoadWindowsLayout()
+	if freshWin then
+		layouts["windows_auto"] = freshWin
+		if layoutOrder[1] ~= "windows_auto" then
+			table.insert(layoutOrder, 1, "windows_auto")
 		end
 	end
 
@@ -194,13 +190,17 @@ function KeyboardLayout.GetLayout()
 		end
 	end
 
-	-- Default to windows_auto if available, otherwise qwerty
 	if layouts["windows_auto"] then
 		activeLayoutId = "windows_auto"
 	else
 		activeLayoutId = "qwerty"
 	end
 	return activeLayoutId
+end
+
+function KeyboardLayout.GetLayout()
+	if activeLayoutId then return activeLayoutId end
+	return KeyboardLayout.ReloadWindowsLayout()
 end
 
 function KeyboardLayout.SetLayout(id)
