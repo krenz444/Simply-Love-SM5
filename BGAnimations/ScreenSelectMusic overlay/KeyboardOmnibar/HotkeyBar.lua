@@ -26,7 +26,7 @@ local af = Def.ActorFrame {
 -- -------------------------------------------------------------
 local topPillX = IsUsingWideScreen() and (_screen.cx + 168) or (_screen.cx + 125)
 local topPillW = IsUsingWideScreen() and 264 or 205
-local topPillH = 26
+local topPillH = 32
 
 local topPill = Def.ActorFrame {
 	Name = "HeaderSearchPill",
@@ -34,10 +34,10 @@ local topPill = Def.ActorFrame {
 		self:xy(topPillX, 16)
 	end,
 
-	-- Outer pill border
+	-- Outer pill border / frame
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(topPillW + 2, topPillH + 2)
+			self:zoomto(topPillW + 2, topPillH)
 			self:diffuse(GetCurrentColor()):diffusealpha(0.85)
 		end,
 		ColorSelectedMessageCommand = function(self)
@@ -45,11 +45,23 @@ local topPill = Def.ActorFrame {
 		end,
 	},
 
-	-- Pill opaque dark background
+	-- Pill opaque dark background (full 32px height of the top bar)
 	Def.Quad {
 		InitCommand = function(self)
 			self:zoomto(topPillW, topPillH)
 			self:diffuse(color("0.05, 0.06, 0.09, 1.0"))
+		end,
+	},
+
+	-- Bottom accent hairline running along the bottom seam of the top bar
+	Def.Quad {
+		InitCommand = function(self)
+			self:y(topPillH / 2 - 1)
+			self:zoomto(topPillW, 2)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.9)
+		end,
+		ColorSelectedMessageCommand = function(self)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.9)
 		end,
 	},
 
@@ -59,7 +71,7 @@ local topPill = Def.ActorFrame {
 		InitCommand = function(self)
 			self:x(-topPillW / 2 + 12)
 			self:horizalign(left)
-			self:zoom(0.64)
+			self:zoom(0.68)
 			self:diffuse(Color.White)
 			self:settext("[ / ] Type to Search")
 		end,
@@ -71,7 +83,7 @@ local topPill = Def.ActorFrame {
 		InitCommand = function(self)
 			self:x(topPillW / 2 - 10)
 			self:horizalign(right)
-			self:zoom(0.56)
+			self:zoom(0.58)
 			self:playcommand("RefreshLayout")
 		end,
 		RefreshLayoutCommand = function(self)
