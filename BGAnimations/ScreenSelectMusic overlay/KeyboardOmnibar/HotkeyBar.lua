@@ -65,55 +65,15 @@ local topPill = Def.ActorFrame {
 		end,
 	},
 
-	-- Left search prompt text (larger, high contrast)
+	-- Search prompt text (cleanly centered, high contrast affordance)
 	LoadFont("Common Normal") .. {
 		Name = "SearchPrompt",
 		InitCommand = function(self)
-			self:x(-topPillW / 2 + 12)
-			self:horizalign(left)
-			self:zoom(0.68)
+			self:x(0)
+			self:horizalign(center)
+			self:zoom(0.70)
 			self:diffuse(Color.White)
 			self:settext("[ / ] Type to Search")
-		end,
-	},
-
-	-- Right layout indicator badge
-	LoadFont("Common Normal") .. {
-		Name = "LayoutBadge",
-		InitCommand = function(self)
-			self:x(topPillW / 2 - 10)
-			self:horizalign(right)
-			self:zoom(0.58)
-			self:playcommand("RefreshLayout")
-		end,
-		RefreshLayoutCommand = function(self)
-			local layName = "QWERTY"
-			if FILEMAN:DoesFileExist("Save/KeyboardLayout.txt") then
-				local text = lua.ReadFile("Save/KeyboardLayout.txt") or ""
-				local clean = text:gsub("^%s*(.-)%s*$", "%1"):lower()
-				if clean == "colemak" then layName = "Colemak"
-				elseif clean == "colemak-dh" then layName = "Colemak-DH"
-				elseif clean == "windows_auto" then layName = "Win Auto" end
-			end
-			self:settext(string.format("[%s]", layName))
-			if layName == "Colemak" or layName == "Colemak-DH" then
-				self:diffuse(color("#ffdd55"))
-			elseif layName == "Win Auto" then
-				self:diffuse(color("#55ddff"))
-			else
-				self:diffuse(color("#55ff88"))
-			end
-		end,
-		KeyboardLayoutChangedMessageCommand = function(self, params)
-			local name = params and params.name or "QWERTY"
-			self:settext(string.format("[%s]", name))
-			if name == "Colemak" or name == "Colemak-DH" then
-				self:diffuse(color("#ffdd55"))
-			elseif name == "Win Auto" then
-				self:diffuse(color("#55ddff"))
-			else
-				self:diffuse(color("#55ff88"))
-			end
 		end,
 	},
 }
