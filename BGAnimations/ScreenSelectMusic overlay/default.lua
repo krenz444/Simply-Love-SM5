@@ -11,6 +11,13 @@ local af = Def.ActorFrame{
 		-- the preselected music rate.
 		local songOptions = GAMESTATE:GetSongOptionsObject("ModsLevel_Preferred")
 		songOptions:MusicRate(SL.Global.ActiveModifiers.MusicRate)
+
+		-- If preferred style is "single" (or only P1 should be playing), ensure PLAYER_2
+		-- is cleanly unjoined so its panes, stepartist, and density graphs do not overlap P1
+		if ThemePrefs.Get("PreferredStyle") == "single" and GAMESTATE:IsHumanPlayer(PLAYER_2) then
+			GAMESTATE:UnjoinPlayer(PLAYER_2)
+			GAMESTATE:SetCurrentStyle("single")
+		end
 	end,
 
 	PlayerProfileSetMessageCommand=function(self, params)
@@ -87,6 +94,7 @@ local af = Def.ActorFrame{
 	LoadActor("./Leaderboard.lua"),
 
 	LoadActor("./SongSearch/default.lua"),
+	LoadActor("./KeyboardOmnibar/default.lua"),
 }
 
 return af
