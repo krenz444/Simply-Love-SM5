@@ -29,7 +29,6 @@ local mainContainer = nil
 local queryTextActor = nil
 local placeholderTextActor = nil
 local countTextActor = nil
-local layoutTextActor = nil
 local noResultsActor = nil
 local rowActors = {}
 for r = 1, maxRows do
@@ -45,20 +44,6 @@ local diffKeyMap = {
 	["4"] = "Difficulty_Hard",
 	["5"] = "Difficulty_Challenge",
 }
-
-local function RefreshLayoutUI()
-	if layoutTextActor then
-		local name = KeyboardLayout.GetLayoutName()
-		layoutTextActor:settext(string.format("[ Ctrl+L ] [%s]", name))
-		if name == "Colemak" or name == "Colemak-DH" then
-			layoutTextActor:diffuse(color("#ffcc66"))
-		elseif name == "Win Auto" then
-			layoutTextActor:diffuse(color("#55ddff"))
-		else
-			layoutTextActor:diffuse(color("#66ff88"))
-		end
-	end
-end
 
 -- Refresh UI Rows
 local function RefreshResultsUI()
@@ -100,8 +85,6 @@ local function RefreshResultsUI()
 			end
 		end
 	end
-
-	RefreshLayoutUI()
 
 	-- Update Empty State Message
 	if noResultsActor then
@@ -449,12 +432,9 @@ local function KeyboardInputHandler(event)
 	local isDown = (eventType == "InputEventType_FirstPress" or eventType == "InputEventType_Repeat")
 	if not isDown then return false end
 
-	-- Global Layout Toggle via Ctrl+L (checks physical L 'DeviceButton_l', Colemak L 'DeviceButton_u', or 'DeviceButton_k')
+	-- Global Layout Toggle via Ctrl+L (silent background fallback)
 	if isCtrlHeld and (btn == "DeviceButton_l" or btn == "DeviceButton_u" or btn == "DeviceButton_k") then
-		local nextId, nextName = KeyboardLayout.CycleLayout()
-		SCREENMAN:SystemMessage("Keyboard Layout: " .. nextName)
-		MESSAGEMAN:Broadcast("KeyboardLayoutChanged", { layout = nextId, name = nextName })
-		RefreshLayoutUI()
+		KeyboardLayout.CycleLayout()
 		return true
 	end
 
@@ -705,34 +685,12 @@ local af = Def.ActorFrame {
 	end,
 	TestStepOpenCommand = function(self)
 		OpenOmnibar("")
-		KeyboardLayout.SetLayout("colemak")
-		RefreshLayoutUI()
 		Trace("OMNIBAR_TEST_STEP: open")
 		self:sleep(1.2):queuecommand("TestStepColemak")
 	end,
 	TestStepColemakCommand = function(self)
-		-- Verify Colemak 'o' key mapping: physical semicolon/colon key produces 'o' (and 'O' shifted)
-		local colemakO = KeyboardLayout.TranslateButton("DeviceButton_colon", false)
-		local colemakOShift = KeyboardLayout.TranslateButton("DeviceButton_colon", true)
-		local colemakSemi = KeyboardLayout.TranslateButton("DeviceButton_p", false)
-		local colemakColon = KeyboardLayout.TranslateButton("DeviceButton_p", true)
-
-		-- Verify QWERTY mappings for comparison
-		KeyboardLayout.SetLayout("qwerty")
-		local qwertyO = KeyboardLayout.TranslateButton("DeviceButton_o", false)
-		local qwertyColon = KeyboardLayout.TranslateButton("DeviceButton_colon", false)
-		local qwertyColonShift = KeyboardLayout.TranslateButton("DeviceButton_colon", true)
-
-		-- Verify Windows Auto layout mapping
-		KeyboardLayout.SetLayout("windows_auto")
+		-- Verify active layout mappings
 		local winName = KeyboardLayout.GetLayoutName()
-		local winO = KeyboardLayout.TranslateButton("DeviceButton_colon", false)
-		local winOShift = KeyboardLayout.TranslateButton("DeviceButton_colon", true)
-		local winP = KeyboardLayout.TranslateButton("DeviceButton_p", false)
-
-		-- Restore Colemak layout for test pass
-		KeyboardLayout.SetLayout("colemak")
-		RefreshLayoutUI()
 
 		Trace(string.format("VERIFY_WINDOWS_AUTO: name=%s winO=%s winOShift=%s winP=%s",
 			tostring(winName), tostring(winO), tostring(winOShift), tostring(winP)))
@@ -954,18 +912,6 @@ local modal = Def.ActorFrame {
 		end,
 	},
 
-	-- Layout Indicator Badge
-	LoadFont("Common Normal") .. {
-		Name = "LayoutBadge",
-		InitCommand = function(self)
-			layoutTextActor = self
-			self:xy(boxWidth / 2 - 180, -boxHeight / 2 + 25)
-			self:horizalign(right)
-			self:zoom(0.65)
-			RefreshLayoutUI()
-		end,
-	},
-
 	-- Match Count Text
 	LoadFont("Common Normal") .. {
 		Name = "CountText",
@@ -1005,7 +951,7 @@ local modal = Def.ActorFrame {
 			self:xy(0, boxHeight / 2 - 16)
 			self:zoom(0.56)
 			self:diffuse(color("#bbbbbb"))
-			self:settext("[ ↑ / ↓ ] Navigate   |   [ Ctrl+↑ / ↓ ] History   |   [ Ctrl+L ] Layout   |   [ Enter ] Select   |   [ Esc ] Close")
+			self:settext("[ ↑ / ↓ ] Navigate   |   [ Ctrl+↑ / ↓ ] History   |   [ Enter ] Select   |   [ Esc ] Close")
 		end,
 	},
 }
