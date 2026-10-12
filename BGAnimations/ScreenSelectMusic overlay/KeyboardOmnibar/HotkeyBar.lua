@@ -1,13 +1,11 @@
 -- HotkeyBar.lua
--- Sleek, non-intrusive keyboard hotkey guide displayed above the MusicWheel
+-- Seamless, non-intrusive keyboard search affordance & hotkey guide for Simply Love.
+-- Integrates directly into top header and bottom footer chrome with ZERO gameplay/wheel obstruction.
 
 local af = Def.ActorFrame {
 	Name = "KeyboardHotkeyBar",
 	InitCommand = function(self)
-		local xPos = IsUsingWideScreen() and (_screen.cx + 175) or _screen.cx
-		local yPos = IsUsingWideScreen() and 53 or 38
-		self:xy(xPos, yPos)
-		self:draworder(100)
+		self:draworder(105)
 		self:visible(ThemePrefs.Get("KeyboardFeatures"))
 	end,
 	OnCommand = function(self)
@@ -19,56 +17,120 @@ local af = Def.ActorFrame {
 	HideOmnibarMessageCommand = function(self)
 		self:visible(ThemePrefs.Get("KeyboardFeatures"))
 	end,
+}
 
-	-- Card backdrop
+-- -------------------------------------------------------------
+-- 1. Top Header Search Pill (Docked cleanly inside top header bar)
+-- Positioned at y = 16, directly above the MusicWheel column.
+-- Completely above y = 32 so it NEVER collides with any wheel items.
+-- -------------------------------------------------------------
+local topPillX = IsUsingWideScreen() and (_screen.cx + 165) or (_screen.cx + 125)
+local topPillW = IsUsingWideScreen() and 230 or 185
+local topPillH = 22
+
+local topPill = Def.ActorFrame {
+	Name = "HeaderSearchPill",
+	InitCommand = function(self)
+		self:xy(topPillX, 16)
+	end,
+
+	-- Outer pill border
 	Def.Quad {
 		InitCommand = function(self)
-			local w = IsUsingWideScreen() and 380 or (_screen.w - 20)
-			self:zoomto(w, 32)
-			self:diffuse(color("0.05, 0.06, 0.09, 0.96"))
+			self:zoomto(topPillW + 2, topPillH + 2)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.85)
+		end,
+		ColorSelectedMessageCommand = function(self)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.85)
 		end,
 	},
 
-	-- Top accent hairline
+	-- Pill opaque dark background
 	Def.Quad {
 		InitCommand = function(self)
-			local w = IsUsingWideScreen() and 380 or (_screen.w - 20)
-			self:y(-15)
-			self:zoomto(w, 1.5)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.8)
+			self:zoomto(topPillW, topPillH)
+			self:diffuse(color("0.04, 0.05, 0.08, 1.0"))
 		end,
 	},
 
-	-- Line 1: Main navigation hotkeys
+	-- Left search prompt text
 	LoadFont("Common Normal") .. {
+		Name = "SearchPrompt",
 		InitCommand = function(self)
-			self:y(-6)
-			self:zoom(0.55)
+			self:x(-topPillW / 2 + 10)
+			self:horizalign(left)
+			self:zoom(0.52)
 			self:diffuse(Color.White)
-			self:settext("[ / ] Type to Search   |   [ [ / ] ] Skip Pack   |   [ 1-5 ] Difficulty")
+			self:settext("[ / ] Type to Search")
 		end,
 	},
 
-	-- Line 2: Feature hotkeys & layout indicator
+	-- Right layout indicator badge
 	LoadFont("Common Normal") .. {
+		Name = "LayoutBadge",
 		InitCommand = function(self)
-			self:y(7)
-			self:zoom(0.48)
-			self:diffuse(color("#bbccdd"))
+			self:x(topPillW / 2 - 8)
+			self:horizalign(right)
+			self:zoom(0.50)
+			self:playcommand("RefreshLayout")
+		end,
+		RefreshLayoutCommand = function(self)
 			local layName = "QWERTY"
 			if FILEMAN:DoesFileExist("Save/KeyboardLayout.txt") then
 				local text = lua.ReadFile("Save/KeyboardLayout.txt") or ""
 				local clean = text:gsub("^%s*(.-)%s*$", "%1"):lower()
 				if clean == "colemak" then layName = "Colemak"
-				elseif clean == "colemak-dh" then layName = "Colemak-DH" end
+				elseif clean == "colemak-dh" then layName = "Colemak-DH"
+				elseif clean == "windows_auto" then layName = "Win Auto" end
 			end
-			self:settext(string.format("[ F ] Favorite  |  [ L ] Scores  |  [ P ] Practice  |  [ S ] Sort  |  [ Ctrl+L ] Layout: %s", layName))
+			self:settext(string.format("[%s]", layName))
+			if layName == "Colemak" or layName == "Colemak-DH" then
+				self:diffuse(color("#ffdd55"))
+			elseif layName == "Win Auto" then
+				self:diffuse(color("#55ddff"))
+			else
+				self:diffuse(color("#55ff88"))
+			end
 		end,
 		KeyboardLayoutChangedMessageCommand = function(self, params)
 			local name = params and params.name or "QWERTY"
-			self:settext(string.format("[ F ] Favorite  |  [ L ] Scores  |  [ P ] Practice  |  [ S ] Sort  |  [ Ctrl+L ] Layout: %s", name))
+			self:settext(string.format("[%s]", name))
+			if name == "Colemak" or name == "Colemak-DH" then
+				self:diffuse(color("#ffdd55"))
+			elseif name == "Win Auto" then
+				self:diffuse(color("#55ddff"))
+			else
+				self:diffuse(color("#55ff88"))
+			end
 		end,
 	},
 }
+
+af[#af + 1] = topPill
+
+-- -------------------------------------------------------------
+-- 2. Bottom Footer Hotkey Legend (Docked cleanly inside footer chrome)
+-- Positioned at y = _screen.h - 16, right of EVENT MODE.
+-- Zero overlap with any gameplay panes or wheel graphics.
+-- -------------------------------------------------------------
+local bottomX = IsUsingWideScreen() and (_screen.cx + 170) or (_screen.cx + 125)
+
+local bottomLegend = Def.ActorFrame {
+	Name = "FooterHotkeyLegend",
+	InitCommand = function(self)
+		self:xy(bottomX, _screen.h - 16)
+	end,
+
+	LoadFont("Common Normal") .. {
+		InitCommand = function(self)
+			self:zoom(0.48)
+			self:diffuse(color("#ddeeff"))
+			self:shadowlength(0.2)
+			self:settext("[ [ / ] ] Skip Pack   |   [ 1-5 ] Diff   |   [ S ] Sort")
+		end,
+	},
+}
+
+af[#af + 1] = bottomLegend
 
 return af

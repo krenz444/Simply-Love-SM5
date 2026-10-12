@@ -27,6 +27,7 @@ local lastPreviewSong = nil
 -- References to UI Actors
 local mainContainer = nil
 local queryTextActor = nil
+local placeholderTextActor = nil
 local countTextActor = nil
 local layoutTextActor = nil
 local noResultsActor = nil
@@ -48,9 +49,11 @@ local diffKeyMap = {
 local function RefreshLayoutUI()
 	if layoutTextActor then
 		local name = KeyboardLayout.GetLayoutName()
-		layoutTextActor:settext("[" .. name .. "]")
+		layoutTextActor:settext(string.format("[ Ctrl+L ] [%s]", name))
 		if name == "Colemak" or name == "Colemak-DH" then
 			layoutTextActor:diffuse(color("#ffcc66"))
+		elseif name == "Win Auto" then
+			layoutTextActor:diffuse(color("#55ddff"))
 		else
 			layoutTextActor:diffuse(color("#66ff88"))
 		end
@@ -61,9 +64,16 @@ end
 local function RefreshResultsUI()
 	if not mainContainer then return end
 
-	-- Update Query Text
+	-- Update Query Text & Placeholder
 	if queryTextActor then
-		queryTextActor:settext(searchQuery)
+		if #searchQuery == 0 then
+			queryTextActor:visible(false)
+			if placeholderTextActor then placeholderTextActor:visible(true) end
+		else
+			queryTextActor:visible(true)
+			if placeholderTextActor then placeholderTextActor:visible(false) end
+			queryTextActor:settext(searchQuery)
+		end
 	end
 
 	-- Update Match Counter
@@ -121,13 +131,18 @@ local function RefreshResultsUI()
 				row.container:visible(true)
 				local isSelected = (itemIdx == selectedIndex)
 
-				-- Selection highlight
+				-- Selection highlight & left accent indicator
 				if isSelected then
 					row.highlight:visible(true)
-					row.highlight:diffuse(GetCurrentColor()):diffusealpha(0.4)
+					row.highlight:diffuse(GetCurrentColor()):diffusealpha(0.35)
+					if row.leftPill then
+						row.leftPill:visible(true)
+						row.leftPill:diffuse(GetCurrentColor())
+					end
 					row.title:diffuse(Color.White)
 				else
 					row.highlight:visible(false)
+					if row.leftPill then row.leftPill:visible(false) end
 					row.title:diffuse(color("#dddddd"))
 				end
 
@@ -655,8 +670,8 @@ end
 -----------------------------------------------------------------
 -- Master Actor Frame
 -----------------------------------------------------------------
-local boxWidth = 740
-local boxHeight = 380
+local boxWidth = IsUsingWideScreen() and 780 or 620
+local boxHeight = 390
 
 local af = Def.ActorFrame {
 	Name = "KeyboardOmnibarRoot",
@@ -814,15 +829,18 @@ af[#af + 1] = HotkeyBar
 local modal = Def.ActorFrame {
 	Name = "OmnibarModal",
 	InitCommand = function(self)
-		self:xy(_screen.cx, _screen.cy - 10)
-		self:draworder(200)
+		self:xy(_screen.cx, _screen.cy)
+		self:draworder(250)
 		self:visible(false)
 	end,
 
-	-- Dark screen backdrop
+	-- Fullscreen dark backdrop dimming everything smoothly
 	Def.Quad {
+		Name = "DimBackdrop",
 		InitCommand = function(self)
-			self:FullScreen():diffuse(color("0,0,0,0.85"))
+			self:xy(0, 0)
+			self:zoomto(_screen.w, _screen.h)
+			self:diffuse(color("0, 0, 0, 0.88"))
 		end,
 	},
 
@@ -832,13 +850,28 @@ local modal = Def.ActorFrame {
 			self:zoomto(boxWidth + 4, boxHeight + 4)
 			self:diffuse(GetCurrentColor())
 		end,
+		ColorSelectedMessageCommand = function(self)
+			self:diffuse(GetCurrentColor())
+		end,
 	},
 
 	-- Window body
 	Def.Quad {
 		InitCommand = function(self)
 			self:zoomto(boxWidth, boxHeight)
-			self:diffuse(color("0.05, 0.06, 0.09, 0.97"))
+			self:diffuse(color("0.05, 0.06, 0.09, 0.98"))
+		end,
+	},
+
+	-- Top accent hairline
+	Def.Quad {
+		InitCommand = function(self)
+			self:xy(0, -boxHeight / 2 + 1)
+			self:zoomto(boxWidth, 2)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.8)
+		end,
+		ColorSelectedMessageCommand = function(self)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.8)
 		end,
 	},
 
@@ -846,8 +879,8 @@ local modal = Def.ActorFrame {
 	Def.Quad {
 		InitCommand = function(self)
 			self:xy(0, -boxHeight / 2 + 25)
-			self:zoomto(boxWidth - 16, 36)
-			self:diffuse(color("0.1, 0.12, 0.16, 0.9"))
+			self:zoomto(boxWidth - 16, 38)
+			self:diffuse(color("0.10, 0.12, 0.16, 0.95"))
 		end,
 	},
 
@@ -856,9 +889,45 @@ local modal = Def.ActorFrame {
 		InitCommand = function(self)
 			self:xy(-boxWidth / 2 + 20, -boxHeight / 2 + 25)
 			self:horizalign(left)
-			self:zoom(0.8)
+			self:zoom(0.68)
 			self:diffuse(GetCurrentColor())
 			self:settext("SEARCH:")
+		end,
+		ColorSelectedMessageCommand = function(self)
+			self:diffuse(GetCurrentColor())
+		end,
+	},
+
+	-- Search input box frame quad
+	Def.Quad {
+		InitCommand = function(self)
+			local inputW = IsUsingWideScreen() and 290 or 195
+			self:xy(-boxWidth / 2 + 125 + inputW / 2, -boxHeight / 2 + 25)
+			self:zoomto(inputW + 2, 28)
+			self:diffuse(color("0.22, 0.26, 0.35, 0.70"))
+		end,
+	},
+	Def.Quad {
+		InitCommand = function(self)
+			local inputW = IsUsingWideScreen() and 290 or 195
+			self:xy(-boxWidth / 2 + 125 + inputW / 2, -boxHeight / 2 + 25)
+			self:zoomto(inputW, 26)
+			self:diffuse(color("0.04, 0.05, 0.07, 0.96"))
+		end,
+	},
+
+	-- Placeholder Text
+	LoadFont("Common Normal") .. {
+		Name = "PlaceholderText",
+		InitCommand = function(self)
+			local inputW = IsUsingWideScreen() and 290 or 195
+			placeholderTextActor = self
+			self:xy(-boxWidth / 2 + 135, -boxHeight / 2 + 25)
+			self:horizalign(left)
+			self:zoom(0.62)
+			self:maxwidth((inputW - 15) / 0.62)
+			self:diffuse(color("#556677"))
+			self:settext("Type song, artist, pack, or diff (d:10)...")
 		end,
 	},
 
@@ -866,11 +935,12 @@ local modal = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		Name = "QueryText",
 		InitCommand = function(self)
+			local inputW = IsUsingWideScreen() and 290 or 195
 			queryTextActor = self
-			self:xy(-boxWidth / 2 + 205, -boxHeight / 2 + 25)
+			self:xy(-boxWidth / 2 + 135, -boxHeight / 2 + 25)
 			self:horizalign(left)
-			self:zoom(0.85)
-			self:maxwidth(250 / 0.85)
+			self:zoom(0.75)
+			self:maxwidth((inputW - 15) / 0.75)
 			self:diffuse(Color.White)
 			self:settext("")
 		end,
@@ -881,9 +951,9 @@ local modal = Def.ActorFrame {
 		Name = "LayoutBadge",
 		InitCommand = function(self)
 			layoutTextActor = self
-			self:xy(boxWidth / 2 - 190, -boxHeight / 2 + 25)
+			self:xy(boxWidth / 2 - 180, -boxHeight / 2 + 25)
 			self:horizalign(right)
-			self:zoom(0.68)
+			self:zoom(0.65)
 			RefreshLayoutUI()
 		end,
 	},
@@ -895,7 +965,7 @@ local modal = Def.ActorFrame {
 			countTextActor = self
 			self:xy(boxWidth / 2 - 20, -boxHeight / 2 + 25)
 			self:horizalign(right)
-			self:zoom(0.7)
+			self:zoom(0.68)
 			self:diffuse(color("#88aaff"))
 			self:settext("0 Results")
 		end,
@@ -906,9 +976,9 @@ local modal = Def.ActorFrame {
 		Name = "NoResultsMessage",
 		InitCommand = function(self)
 			noResultsActor = self
-			self:xy(-boxWidth / 4 + 30, 0)
-			self:zoom(0.75)
-			self:diffuse(color("#778899"))
+			self:xy(-boxWidth / 4 + 20, 0)
+			self:zoom(0.72)
+			self:diffuse(color("#8899aa"))
 			self:visible(false)
 		end,
 	},
@@ -917,7 +987,7 @@ local modal = Def.ActorFrame {
 	Def.Quad {
 		InitCommand = function(self)
 			self:xy(0, boxHeight / 2 - 16)
-			self:zoomto(boxWidth, 26)
+			self:zoomto(boxWidth, 28)
 			self:diffuse(color("0.08, 0.09, 0.12, 0.95"))
 		end,
 	},
@@ -925,7 +995,7 @@ local modal = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		InitCommand = function(self)
 			self:xy(0, boxHeight / 2 - 16)
-			self:zoom(0.58)
+			self:zoom(0.56)
 			self:diffuse(color("#bbbbbb"))
 			self:settext("[ ↑ / ↓ ] Navigate   |   [ Ctrl+↑ / ↓ ] History   |   [ Ctrl+L ] Layout   |   [ Enter ] Select   |   [ Esc ] Close")
 		end,
@@ -933,10 +1003,10 @@ local modal = Def.ActorFrame {
 }
 
 -- 10 Rows for Results List
-local rowStartX = -boxWidth / 2 + 15
-local rowStartY = -boxHeight / 2 + 62
-local rowHeight = 27
-local rowWidth = 475
+local rowStartX = -boxWidth / 2 + 16
+local rowStartY = -boxHeight / 2 + 65
+local rowHeight = 28
+local rowWidth = IsUsingWideScreen() and 500 or 380
 
 for r = 1, maxRows do
 	local yPos = rowStartY + (r - 1) * rowHeight
@@ -958,6 +1028,23 @@ for r = 1, maxRows do
 				self:diffuse(GetCurrentColor()):diffusealpha(0.35)
 				self:visible(false)
 			end,
+			ColorSelectedMessageCommand = function(self)
+				self:diffuse(GetCurrentColor()):diffusealpha(0.35)
+			end,
+		},
+
+		-- Row Left Accent Indicator (3px wide)
+		Def.Quad {
+			InitCommand = function(self)
+				rowActors[r].leftPill = self
+				self:xy(1.5, 0)
+				self:zoomto(3, rowHeight - 2)
+				self:diffuse(GetCurrentColor())
+				self:visible(false)
+			end,
+			ColorSelectedMessageCommand = function(self)
+				self:diffuse(GetCurrentColor())
+			end,
 		},
 
 		-- Row Title
@@ -967,7 +1054,8 @@ for r = 1, maxRows do
 				self:xy(10, 0)
 				self:horizalign(left)
 				self:zoom(0.68)
-				self:maxwidth(155 / 0.68)
+				local maxW = IsUsingWideScreen() and 170 or 125
+				self:maxwidth(maxW / 0.68)
 				self:diffuse(Color.White)
 			end,
 		},
@@ -976,10 +1064,12 @@ for r = 1, maxRows do
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
 				rowActors[r].artist = self
-				self:xy(175, 0)
+				local xA = IsUsingWideScreen() and 190 or 140
+				self:xy(xA, 0)
 				self:horizalign(left)
 				self:zoom(0.58)
-				self:maxwidth(85 / 0.58)
+				local maxW = IsUsingWideScreen() and 90 or 65
+				self:maxwidth(maxW / 0.58)
 				self:diffuse(color("#aaaaaa"))
 			end,
 		},
@@ -988,10 +1078,12 @@ for r = 1, maxRows do
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
 				rowActors[r].group = self
-				self:xy(270, 0)
+				local xG = IsUsingWideScreen() and 290 or 210
+				self:xy(xG, 0)
 				self:horizalign(left)
 				self:zoom(0.52)
-				self:maxwidth(80 / 0.52)
+				local maxW = IsUsingWideScreen() and 90 or 65
+				self:maxwidth(maxW / 0.52)
 				self:diffuse(color("#77bbff"))
 			end,
 		},
@@ -1000,7 +1092,8 @@ for r = 1, maxRows do
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
 				rowActors[r].bpm = self
-				self:xy(395, 0)
+				local xB = IsUsingWideScreen() and 420 or 310
+				self:xy(xB, 0)
 				self:horizalign(right)
 				self:zoom(0.52)
 				self:maxwidth(45 / 0.52)
@@ -1012,10 +1105,14 @@ for r = 1, maxRows do
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
 				rowActors[r].diffs = self
-				self:xy(468, 0)
+				local xD = IsUsingWideScreen() and 492 or 372
+				self:xy(xD, 0)
 				self:horizalign(right)
 				self:zoom(0.52)
 				self:maxwidth(65 / 0.52)
+				self:diffuse(GetCurrentColor())
+			end,
+			ColorSelectedMessageCommand = function(self)
 				self:diffuse(GetCurrentColor())
 			end,
 		},
@@ -1025,7 +1122,7 @@ for r = 1, maxRows do
 end
 
 -- Details Panel on Right Side
-local detailsX = boxWidth / 2 - 120
+local detailsX = boxWidth / 2 - (IsUsingWideScreen() and 125 or 105)
 local detailsY = -boxHeight / 2 + 50
 
 local detailsFrame = Def.ActorFrame {
@@ -1038,8 +1135,9 @@ local detailsFrame = Def.ActorFrame {
 	-- Divider line
 	Def.Quad {
 		InitCommand = function(self)
-			self:xy(-115, 115)
-			self:zoomto(1.5, 270)
+			local divX = IsUsingWideScreen() and -125 or -105
+			self:xy(divX, 120)
+			self:zoomto(1.5, 275)
 			self:diffuse(color("1,1,1,0.15"))
 		end,
 	},
@@ -1049,8 +1147,8 @@ local detailsFrame = Def.ActorFrame {
 		Name = "DetailBanner",
 		InitCommand = function(self)
 			detailsPanel.banner = self
-			self:xy(0, 45)
-			self:setsize(210, 80)
+			self:xy(0, 48)
+			self:setsize(218, 84)
 		end,
 	},
 
@@ -1058,9 +1156,9 @@ local detailsFrame = Def.ActorFrame {
 	LoadFont("Common Bold") .. {
 		InitCommand = function(self)
 			detailsPanel.title = self
-			self:xy(0, 98)
-			self:zoom(0.72)
-			self:maxwidth(210 / 0.72)
+			self:xy(0, 102)
+			self:zoom(0.74)
+			self:maxwidth(215 / 0.74)
 			self:diffuse(Color.White)
 		end,
 	},
@@ -1069,9 +1167,9 @@ local detailsFrame = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		InitCommand = function(self)
 			detailsPanel.artist = self
-			self:xy(0, 117)
+			self:xy(0, 122)
 			self:zoom(0.62)
-			self:maxwidth(210 / 0.62)
+			self:maxwidth(215 / 0.62)
 			self:diffuse(color("#99aacc"))
 		end,
 	},
@@ -1080,9 +1178,9 @@ local detailsFrame = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		InitCommand = function(self)
 			detailsPanel.pack = self
-			self:xy(0, 134)
+			self:xy(0, 140)
 			self:zoom(0.58)
-			self:maxwidth(210 / 0.58)
+			self:maxwidth(215 / 0.58)
 			self:diffuse(color("#66ccff"))
 		end,
 	},
@@ -1091,9 +1189,9 @@ local detailsFrame = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		InitCommand = function(self)
 			detailsPanel.stepartist = self
-			self:xy(0, 151)
+			self:xy(0, 158)
 			self:zoom(0.55)
-			self:maxwidth(210 / 0.55)
+			self:maxwidth(215 / 0.55)
 			self:diffuse(color("#ffcc66"))
 		end,
 	},
@@ -1102,9 +1200,9 @@ local detailsFrame = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		InitCommand = function(self)
 			detailsPanel.genre = self
-			self:xy(0, 167)
+			self:xy(0, 175)
 			self:zoom(0.55)
-			self:maxwidth(210 / 0.55)
+			self:maxwidth(215 / 0.55)
 			self:diffuse(color("#bbaaff"))
 		end,
 	},
@@ -1113,9 +1211,9 @@ local detailsFrame = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		InitCommand = function(self)
 			detailsPanel.meta = self
-			self:xy(0, 185)
+			self:xy(0, 194)
 			self:zoom(0.58)
-			self:maxwidth(210 / 0.58)
+			self:maxwidth(215 / 0.58)
 			self:diffuse(color("#aaaaaa"))
 		end,
 	},
