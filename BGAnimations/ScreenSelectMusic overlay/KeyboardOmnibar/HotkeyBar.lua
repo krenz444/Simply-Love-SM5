@@ -20,13 +20,14 @@ local af = Def.ActorFrame {
 }
 
 -- -------------------------------------------------------------
--- 1. Top Header Search Pill (Docked cleanly inside top header bar)
+-- 1. Top Header Search Button (Docked cleanly inside top header bar)
 -- Positioned at y = 16, directly above the MusicWheel column.
 -- Completely above y = 32 so it NEVER collides with any wheel items.
+-- High-visibility elevated button with keycap badge and bold label.
 -- -------------------------------------------------------------
 local topPillX = IsUsingWideScreen() and (_screen.cx + 185) or (_screen.cx + 135)
-local topPillW = IsUsingWideScreen() and 230 or 160
-local topPillH = 32
+local topPillW = IsUsingWideScreen() and 244 or 160
+local topPillH = 26
 
 local topPill = Def.ActorFrame {
 	Name = "HeaderSearchPill",
@@ -34,46 +35,75 @@ local topPill = Def.ActorFrame {
 		self:xy(topPillX, 16)
 	end,
 
-	-- Outer pill border / frame
+	-- Outer accent frame / solid 2px theme border
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(topPillW + 2, topPillH)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.85)
+			self:zoomto(topPillW + 4, topPillH + 4)
+			self:diffuse(GetCurrentColor()):diffusealpha(1.0)
 		end,
 		ColorSelectedMessageCommand = function(self)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.85)
+			self:diffuse(GetCurrentColor()):diffusealpha(1.0)
 		end,
 	},
 
-	-- Pill opaque dark background (full 32px height of the top bar)
+	-- Elevated dark slate button surface (high contrast against pure black header)
 	Def.Quad {
 		InitCommand = function(self)
 			self:zoomto(topPillW, topPillH)
-			self:diffuse(color("0.05, 0.06, 0.09, 1.0"))
+			self:diffuse(color("0.13, 0.16, 0.25, 1.0"))
 		end,
 	},
 
-	-- Bottom accent hairline running along the bottom seam of the top bar
+	-- Bottom edge highlight for 3D button depth
 	Def.Quad {
 		InitCommand = function(self)
 			self:y(topPillH / 2 - 1)
-			self:zoomto(topPillW, 2)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.9)
+			self:zoomto(topPillW - 2, 2)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.85)
 		end,
 		ColorSelectedMessageCommand = function(self)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.9)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.85)
 		end,
 	},
 
-	-- Search prompt text (cleanly centered, high contrast affordance)
+	-- Keycap badge container (solid theme-colored keycap affordance)
+	Def.ActorFrame {
+		Name = "KeycapBadge",
+		InitCommand = function(self)
+			self:x(-topPillW / 2 + 28)
+		end,
+
+		-- Keycap solid background pill
+		Def.Quad {
+			InitCommand = function(self)
+				self:zoomto(42, 20)
+				self:diffuse(GetCurrentColor())
+			end,
+			ColorSelectedMessageCommand = function(self)
+				self:diffuse(GetCurrentColor())
+			end,
+		},
+
+		-- Keycap text inside badge (clean, high-contrast dark text)
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:zoom(0.72)
+				self:diffuse(color("0.05, 0.05, 0.08, 1.0"))
+				self:settext("[ / ]")
+			end,
+		},
+	},
+
+	-- Primary Action Label ("SEARCH SONGS" in crisp bright white)
 	LoadFont("Common Normal") .. {
 		Name = "SearchPrompt",
 		InitCommand = function(self)
-			self:x(0)
+			self:x(24)
 			self:horizalign(center)
-			self:zoom(IsUsingWideScreen() and 0.68 or 0.55)
+			self:zoom(IsUsingWideScreen() and 0.86 or 0.68)
 			self:diffuse(Color.White)
-			self:settext("[ / ] Type to Search")
+			self:shadowlength(1)
+			self:settext("SEARCH SONGS")
 		end,
 	},
 }
