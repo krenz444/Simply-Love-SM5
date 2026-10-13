@@ -95,6 +95,7 @@ local af = Def.ActorFrame{
 
 	LoadActor("./SongSearch/default.lua"),
 	LoadActor("./KeyboardOmnibar/default.lua"),
+	LoadActor("./CategoryNavigation/default.lua"),
 }
 
 return af

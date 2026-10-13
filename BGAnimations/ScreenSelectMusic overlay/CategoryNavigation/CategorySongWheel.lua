@@ -1,0 +1,353 @@
+-- CategorySongWheel.lua
+-- Virtual, high-performance song scroller for the active category in CategoryNavigation.
+-- Renders 8 high-density cards with live metadata, difficulty badges, and scrollbar.
+
+local CategorySongWheel = {}
+
+local wheelX = IsUsingWideScreen() and (_screen.cx + _screen.w/4) or (_screen.cx + 160)
+local wheelW = IsUsingWideScreen() and 396 or 300
+local maxRows = 8
+local rowHeight = 38
+local startY = 100
+
+-- Format helpers
+local function FormatLength(seconds)
+	if not seconds or seconds <= 0 then return "" end
+	local m = math.floor(seconds / 60)
+	local s = math.floor(seconds % 60)
+	return string.format("%d:%02d", m, s)
+end
+
+local function FormatBPM(bpms)
+	if not bpms or #bpms == 0 then return "" end
+	local minB = math.floor(bpms[1] or 0)
+	local maxB = math.floor(bpms[2] or minB)
+	if minB == maxB or maxB == 0 then
+		return tostring(minB)
+	else
+		return tostring(minB) .. "-" .. tostring(maxB)
+	end
+end
+
+local function GetSongDisplayMeter(entry)
+	if not entry then return "", Color.White end
+	local p1 = GAMESTATE:IsPlayerEnabled(PLAYER_1) and PLAYER_1 or nil
+	local pDiff = p1 and GAMESTATE:GetPreferredDifficulty(p1) or "Difficulty_Hard"
+
+	if entry.meters and entry.meters[pDiff] then
+		return tostring(entry.meters[pDiff]), DifficultyColor(pDiff)
+	end
+
+	local fallbackDiffs = { "Difficulty_Hard", "Difficulty_Medium", "Difficulty_Challenge", "Difficulty_Easy", "Difficulty_Beginner" }
+	for _, diff in ipairs(fallbackDiffs) do
+		if entry.meters and entry.meters[diff] then
+			return tostring(entry.meters[diff]), DifficultyColor(diff)
+		end
+	end
+
+	if entry.meterList and #entry.meterList > 0 then
+		return tostring(entry.meterList[#entry.meterList]), color("#ffaa00")
+	end
+
+	return "?", Color.White
+end
+
+local af = Def.ActorFrame {
+	Name = "CategorySongWheelRoot",
+	InitCommand = function(self)
+		self:xy(wheelX, 0)
+		self:draworder(105)
+	end,
+}
+
+-- -------------------------------------------------------------
+-- Song Cards (1 through 8)
+-- -------------------------------------------------------------
+for r = 1, maxRows do
+	local cardY = startY + (r - 1) * rowHeight
+
+	local rowAF = Def.ActorFrame {
+		Name = "SongCard_" .. r,
+		InitCommand = function(self)
+			self:y(cardY)
+			self:visible(false)
+		end,
+		UpdateCategoryUIMessageCommand = function(self, params)
+			if not params or not params.songs then
+				self:visible(false)
+				return
+			end
+
+			local songIdx = (params.topIdx or 1) + (r - 1)
+			local entry = params.songs[songIdx]
+			if not entry then
+				self:visible(false)
+				return
+			end
+
+			self:visible(true)
+			local isSelected = (songIdx == (params.selectedIdx or 1))
+
+			local cardBg = self:GetChild("CardBg")
+			local cardHighlight = self:GetChild("CardHighlight")
+			local leftAccent = self:GetChild("LeftAccent")
+			local meterBadgeBg = self:GetChild("MeterBadgeBg")
+			local meterText = self:GetChild("MeterText")
+			local titleText = self:GetChild("TitleText")
+			local subText = self:GetChild("SubText")
+			local bpmLengthText = self:GetChild("BpmLengthText")
+
+			cardHighlight:visible(isSelected)
+			leftAccent:visible(isSelected)
+			if isSelected then
+				cardBg:diffuse(color("0.12, 0.16, 0.24, 0.96"))
+			else
+				cardBg:diffuse(color("0.06, 0.08, 0.12, 0.90"))
+			end
+
+			titleText:settext(entry.title or "")
+			subText:settext((entry.artist or "") .. "  •  " .. (entry.group or ""))
+
+			local bpmStr = FormatBPM(entry.bpms)
+			local lenStr = FormatLength(entry.length)
+			if #bpmStr > 0 and #lenStr > 0 then
+				bpmLengthText:settext(bpmStr .. " BPM  " .. lenStr)
+			elseif #bpmStr > 0 then
+				bpmLengthText:settext(bpmStr .. " BPM")
+			else
+				bpmLengthText:settext(lenStr)
+			end
+
+			local mStr, mColor = GetSongDisplayMeter(entry)
+			meterText:settext(mStr)
+			meterBadgeBg:diffuse(mColor)
+		end,
+
+		-- Card backdrop
+		Def.Quad {
+			Name = "CardBg",
+			InitCommand = function(self)
+				self:zoomto(wheelW, rowHeight - 3)
+				self:diffuse(color("0.06, 0.08, 0.12, 0.90"))
+			end,
+		},
+
+		-- Selection Highlight Quad
+		Def.Quad {
+			Name = "CardHighlight",
+			InitCommand = function(self)
+				self:zoomto(wheelW, rowHeight - 3)
+				self:diffuse(GetCurrentColor()):diffusealpha(0.25)
+				self:visible(false)
+			end,
+			ColorSelectedMessageCommand = function(self)
+				self:diffuse(GetCurrentColor()):diffusealpha(0.25)
+			end,
+		},
+
+		-- Left selection accent pill
+		Def.Quad {
+			Name = "LeftAccent",
+			InitCommand = function(self)
+				self:x(-wheelW / 2 + 2)
+				self:zoomto(4, rowHeight - 3)
+				self:diffuse(GetCurrentColor())
+				self:visible(false)
+			end,
+			ColorSelectedMessageCommand = function(self)
+				self:diffuse(GetCurrentColor())
+			end,
+		},
+
+		-- Difficulty Meter Badge Quad
+		Def.Quad {
+			Name = "MeterBadgeBg",
+			InitCommand = function(self)
+				self:x(-wheelW / 2 + 24)
+				self:zoomto(28, 22)
+				self:diffuse(color("0.15, 0.18, 0.26, 1.0"))
+			end,
+		},
+
+		-- Difficulty Meter Text
+		LoadFont("Common Normal") .. {
+			Name = "MeterText",
+			InitCommand = function(self)
+				self:x(-wheelW / 2 + 24)
+				self:zoom(0.58)
+				self:shadowlength(0.2)
+				self:diffuse(Color.White)
+				self:settext("")
+			end,
+		},
+
+		-- Song Title
+		LoadFont("Common Normal") .. {
+			Name = "TitleText",
+			InitCommand = function(self)
+				self:x(-wheelW / 2 + 44)
+				self:y(-7)
+				self:horizalign(left)
+				self:zoom(0.55)
+				self:maxwidth((wheelW - 145) / 0.55)
+				self:diffuse(Color.White)
+				self:shadowlength(0.2)
+				self:settext("")
+			end,
+		},
+
+		-- Artist & Pack Subtitle
+		LoadFont("Common Normal") .. {
+			Name = "SubText",
+			InitCommand = function(self)
+				self:x(-wheelW / 2 + 44)
+				self:y(7)
+				self:horizalign(left)
+				self:zoom(0.40)
+				self:maxwidth((wheelW - 145) / 0.40)
+				self:diffuse(color("#8899aa"))
+				self:settext("")
+			end,
+		},
+
+		-- BPM & Length (Right aligned)
+		LoadFont("Common Normal") .. {
+			Name = "BpmLengthText",
+			InitCommand = function(self)
+				self:x(wheelW / 2 - 10)
+				self:horizalign(right)
+				self:zoom(0.44)
+				self:diffuse(color("#aaccdd"))
+				self:settext("")
+			end,
+		},
+	}
+
+	af[#af + 1] = rowAF
+end
+
+-- -------------------------------------------------------------
+-- Scrollbar Track & Thumb
+-- -------------------------------------------------------------
+local trackH = maxRows * rowHeight
+af[#af + 1] = Def.Quad {
+	Name = "ScrollTrack",
+	InitCommand = function(self)
+		self:x(wheelW / 2 + 4)
+		self:y(startY + trackH / 2 - rowHeight / 2)
+		self:zoomto(3, trackH)
+		self:diffuse(color("0.14, 0.18, 0.25, 0.5"))
+	end,
+}
+
+af[#af + 1] = Def.Quad {
+	Name = "ScrollThumb",
+	InitCommand = function(self)
+		self:x(wheelW / 2 + 4)
+		self:y(startY)
+		self:zoomto(4, 30)
+		self:diffuse(GetCurrentColor())
+	end,
+	ColorSelectedMessageCommand = function(self)
+		self:diffuse(GetCurrentColor())
+	end,
+	UpdateCategoryUIMessageCommand = function(self, params)
+		if not params or not params.songs or #params.songs == 0 then
+			self:visible(false)
+			return
+		end
+		self:visible(true)
+		local total = #params.songs
+		local thumbH = math.max(18, math.min(trackH, trackH * (maxRows / total)))
+		self:zoomto(4, thumbH)
+		local progress = total > maxRows and ((params.topIdx - 1) / (total - maxRows)) or 0
+		local trackStartY = startY - rowHeight / 2 + thumbH / 2
+		local trackEndY = startY + trackH - rowHeight / 2 - thumbH / 2
+		self:y(trackStartY + progress * (trackEndY - trackStartY))
+	end,
+}
+
+-- -------------------------------------------------------------
+-- Empty Results Notice
+-- -------------------------------------------------------------
+af[#af + 1] = Def.ActorFrame {
+	Name = "NoSongsNotice",
+	InitCommand = function(self)
+		self:y(startY + trackH / 2 - rowHeight / 2)
+		self:visible(false)
+	end,
+	UpdateCategoryUIMessageCommand = function(self, params)
+		if not params or not params.songs or #params.songs == 0 then
+			self:visible(true)
+		else
+			self:visible(false)
+		end
+	end,
+	Def.Quad {
+		InitCommand = function(self)
+			self:zoomto(wheelW - 30, 60)
+			self:diffuse(color("0.07, 0.09, 0.14, 0.95"))
+		end,
+	},
+	LoadFont("Common Normal") .. {
+		InitCommand = function(self)
+			self:y(-10)
+			self:zoom(0.55)
+			self:diffuse(Color.White)
+			self:settext("No songs found in this category")
+		end,
+	},
+	LoadFont("Common Normal") .. {
+		InitCommand = function(self)
+			self:y(12)
+			self:zoom(0.42)
+			self:diffuse(color("#8899aa"))
+			self:settext("Press Tab to change category or [ / ] to switch filter")
+		end,
+	},
+}
+
+-- -------------------------------------------------------------
+-- Summary Footer Pill (y = 414)
+-- -------------------------------------------------------------
+af[#af + 1] = Def.ActorFrame {
+	Name = "SummaryPill",
+	InitCommand = function(self)
+		self:y(startY + trackH - rowHeight / 2 + 16)
+	end,
+	-- Border hairline
+	Def.Quad {
+		InitCommand = function(self)
+			self:zoomto(wheelW + 2, 22)
+			self:diffuse(color("0.16, 0.20, 0.28, 0.8"))
+		end,
+	},
+	-- Background quad
+	Def.Quad {
+		InitCommand = function(self)
+			self:zoomto(wheelW, 20)
+			self:diffuse(color("0.07, 0.09, 0.13, 0.95"))
+		end,
+	},
+	LoadFont("Common Normal") .. {
+		Name = "SummaryText",
+		InitCommand = function(self)
+			self:zoom(0.45)
+			self:shadowlength(0.2)
+			self:diffuse(color("#8899aa"))
+			self:settext("")
+		end,
+		UpdateCategoryUIMessageCommand = function(self, params)
+			if not params or not params.songs then return end
+			local total = #params.songs
+			local sel = params.selectedIdx or 1
+			if total == 0 then
+				self:settext("0 Songs   •   [Tab] Category   •   [ [ / ] ] Filter")
+			else
+				self:settext(string.format("Song %d of %d   •   [Tab] Category   •   [ [ / ] ] Filter", sel, total))
+			end
+		end,
+	},
+}
+
+return af
