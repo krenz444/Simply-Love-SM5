@@ -21,25 +21,25 @@ local af = Def.ActorFrame {
 }
 
 -- -------------------------------------------------------------
--- Tier 1: Top Category Ribbon Tabs (y = 44)
+-- Tier 1: Top Category Ribbon Tabs (y = 38, height = 20)
 -- -------------------------------------------------------------
 local tabContainer = Def.ActorFrame {
 	Name = "Tier1Tabs",
 	InitCommand = function(self)
-		self:y(44)
+		self:y(38)
 	end,
 
 	-- Border hairline
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW + 2, 24)
+			self:zoomto(ribbonW + 2, 22)
 			self:diffuse(color("0.16, 0.20, 0.28, 0.85"))
 		end,
 	},
 	-- Background pill tray
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW, 22)
+			self:zoomto(ribbonW, 20)
 			self:diffuse(color("0.07, 0.09, 0.13, 0.96"))
 		end,
 	},
@@ -62,7 +62,7 @@ for i = 1, numTabs do
 		Def.Quad {
 			Name = "TabHighlight",
 			InitCommand = function(self)
-				self:zoomto(tabSpacing - 4, 18)
+				self:zoomto(tabSpacing - 4, 16)
 				self:visible(i == 1)
 				self:diffuse(GetCurrentColor()):diffusealpha(0.35)
 			end,
@@ -99,7 +99,8 @@ for i = 1, numTabs do
 		LoadFont("Common Normal") .. {
 			Name = "TabLabel",
 			InitCommand = function(self)
-				self:zoom(0.50)
+				self:y(-1)
+				self:zoom(0.46)
 				self:shadowlength(0)
 				self:settext(cat.name)
 				if i == 1 then
@@ -126,18 +127,18 @@ end
 af[#af + 1] = tabContainer
 
 -- -------------------------------------------------------------
--- Tier 2: Sub-Category Filter Chips Tray (y = 70)
+-- Tier 2: Sub-Category Filter Chips Tray (y = 60, height = 18)
 -- -------------------------------------------------------------
 local chipsContainer = Def.ActorFrame {
 	Name = "Tier2Chips",
 	InitCommand = function(self)
-		self:y(70)
+		self:y(60)
 	end,
 
 	-- Border hairline
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW + 2, 22)
+			self:zoomto(ribbonW + 2, 20)
 			self:diffuse(color("0.14, 0.18, 0.25, 0.7"))
 		end,
 	},
@@ -145,7 +146,7 @@ local chipsContainer = Def.ActorFrame {
 	-- Background tray
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW, 20)
+			self:zoomto(ribbonW, 18)
 			self:diffuse(color("0.05, 0.07, 0.11, 0.92"))
 		end,
 	},
@@ -154,8 +155,9 @@ local chipsContainer = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		Name = "ChipsText",
 		InitCommand = function(self)
-			self:zoom(0.44)
+			self:zoom(0.40)
 			self:shadowlength(0)
+			self:maxwidth((ribbonW - 10) / 0.40)
 			self:diffuse(color("#ccddee"))
 			self:settext("")
 		end,

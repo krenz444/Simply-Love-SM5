@@ -24,6 +24,25 @@ local typedQueryBeforeHistory = ""
 -- Audio preview debounce
 local lastPreviewSong = nil
 
+-- Category Navigation active tracking
+local isCatNavActive = false
+
+local function IsCategoryNavActive()
+	if isCatNavActive then return true end
+	if SL and SL.Global and SL.Global.CategoryNavActive == true then return true end
+	local topScreen = SCREENMAN:GetTopScreen()
+	if topScreen and topScreen.GetChild then
+		local overlay = topScreen:GetChild("Overlay")
+		if overlay and overlay.GetChild then
+			local catMaster = overlay:GetChild("CategoryNavigationMaster")
+			if catMaster and catMaster.GetVisible and catMaster:GetVisible() then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- References to UI Actors
 local mainContainer = nil
 local queryTextActor = nil
@@ -264,6 +283,7 @@ end
 
 -- Open the Omnibar
 local function OpenOmnibar(initialChar)
+	if not ThemePrefs.Get("KeyboardFeatures") then return end
 	if isOpen then return end
 	isOpen = true
 	KeyboardLayout.ReloadWindowsLayout()
@@ -338,9 +358,6 @@ local function SelectSongAndClose(directPlay)
 				wheel:SetOpenSection(song:GetGroupName())
 			end
 			selectedViaWheel = wheel:SelectSong(song)
-			wheel:Move(1)
-			wheel:Move(-1)
-			wheel:Move(0)
 		end
 
 		if directPlay then
@@ -433,16 +450,15 @@ local function KeyboardInputHandler(event)
 	local isDown = (eventType == "InputEventType_FirstPress" or eventType == "InputEventType_Repeat")
 	if not isDown then return false end
 
-	-- Global Layout Toggle via Ctrl+L (silent background fallback)
-	if isCtrlHeld and (btn == "DeviceButton_l" or btn == "DeviceButton_u" or btn == "DeviceButton_k") then
-		KeyboardLayout.CycleLayout()
-		return true
-	end
-
 	-----------------------------------------------------------------
 	-- CASE 1: Omnibar is OPEN
 	-----------------------------------------------------------------
 	if isOpen then
+		-- Layout Toggle via Ctrl+L or Ctrl+U while Omnibar is open
+		if isCtrlHeld and (btn == "DeviceButton_l" or btn == "DeviceButton_u") then
+			KeyboardLayout.CycleLayout()
+			return true
+		end
 		-- Escape: clear query or close
 		if btn == "DeviceButton_escape" then
 			if #searchQuery > 0 then
@@ -565,11 +581,23 @@ local function KeyboardInputHandler(event)
 	-----------------------------------------------------------------
 	-- CASE 2: Omnibar is CLOSED (ScreenSelectMusic normal state)
 	-----------------------------------------------------------------
+	-- If Category Navigation is active, MUST NOT intercept normal typing keys!
+	-- Return false immediately so Category Navigation handles all navigation, typing, and hotkeys.
+	if IsCategoryNavActive() then
+		return false
+	end
+
 	local logicalChar = KeyboardLayout.TranslateButton(btn, false)
 	local typedChar = KeyboardLayout.TranslateButton(btn, isShiftHeld)
 
 	-- 1. Modified / Control Key Hotkeys (when Ctrl is held)
 	if isCtrlHeld then
+		-- Ctrl+L: Cycle Keyboard Layout
+		if btn == "DeviceButton_l" or btn == "DeviceButton_u" or logicalChar == "l" or logicalChar == "u" then
+			KeyboardLayout.CycleLayout()
+			return true
+		end
+
 		-- Ctrl+F or Ctrl+K: Open Omnibar (empty)
 		if btn == "DeviceButton_f" or btn == "DeviceButton_k" or logicalChar == "f" or logicalChar == "k" then
 			OpenOmnibar("")
@@ -622,7 +650,7 @@ local function KeyboardInputHandler(event)
 		end
 
 		-- Ctrl+1 to Ctrl+5: Direct Difficulty Selection
-		local numKey = btn:match("^DeviceButton_([1-5])$")
+		local numKey = btn:match("^DeviceButton_([1-5])$") or btn:match("^DeviceButton_kp%s*([1-5])$") or btn:match("^DeviceButton_KP%s*([1-5])$")
 		if numKey then
 			SetDifficultyDirect(numKey)
 			return true
@@ -633,8 +661,16 @@ local function KeyboardInputHandler(event)
 	end
 
 	-- 2. Non-Ctrl Navigation Hotkeys
+	-- Direct Difficulty Selection via 1-5 (top row or numpad):
+	-- Numbers 1-5 change difficulty directly in wheel mode; they must NEVER hijack into search!
+	local numKey = btn:match("^DeviceButton_([1-5])$") or btn:match("^DeviceButton_kp%s*([1-5])$") or btn:match("^DeviceButton_KP%s*([1-5])$")
+	if numKey then
+		SetDifficultyDirect(numKey)
+		return true
+	end
+
 	-- Slash [/]: Open Omnibar (empty)
-	if btn == "DeviceButton_slash" or btn == "DeviceButton_/" or logicalChar == "/" then
+	if btn == "DeviceButton_slash" or btn == "DeviceButton_/" or logicalChar == "/" or typedChar == "/" then
 		OpenOmnibar("")
 		return true
 	end
@@ -655,9 +691,9 @@ local function KeyboardInputHandler(event)
 	end
 
 	-- 3. INSTANT TYPE-TO-SEARCH:
-	-- Any printable character immediately opens Omnibar and pre-fills that character!
-	-- Matches all letters (A-Z, a-z), numbers (0-9), and search symbols (!, -, etc.)
-	if typedChar and #typedChar == 1 and typedChar ~= " " and typedChar ~= "[" and typedChar ~= "]" then
+	-- Only alphabetical keys [a-zA-Z] trigger instant type-to-search when Omnibar is closed.
+	-- Numbers, punctuation, and other non-alpha keys do NOT hijack into search!
+	if typedChar and #typedChar == 1 and typedChar:match("^[a-zA-Z]$") then
 		OpenOmnibar(typedChar)
 		return true
 	end
@@ -683,8 +719,10 @@ local af = Def.ActorFrame {
 		if mainContainer then
 			mainContainer:visible(false)
 		end
+		isCatNavActive = (ThemePrefs.Get("CategoryNavigation") == true)
 	end,
 	OnCommand = function(self)
+		isCatNavActive = (ThemePrefs.Get("CategoryNavigation") == true) or IsCategoryNavActive()
 		local top = SCREENMAN:GetTopScreen()
 		Trace("OMNIBAR: OnCommand top=" .. tostring(top and top:GetName()))
 		if top and top.AddInputCallback then
@@ -787,8 +825,18 @@ local af = Def.ActorFrame {
 			top:RemoveInputCallback(KeyboardInputHandler)
 		end
 	end,
+	CategoryNavigationModeChangedMessageCommand = function(self, params)
+		if params and params.active ~= nil then
+			isCatNavActive = params.active
+		end
+	end,
 	OpenOmnibarWithQueryMessageCommand = function(self, params)
-		OpenOmnibar(params and params.query or "")
+		if not ThemePrefs.Get("KeyboardFeatures") then return end
+		local q = ""
+		if params and type(params) == "table" and params.query then
+			q = tostring(params.query)
+		end
+		OpenOmnibar(q)
 	end,
 	TriggerAudioPreviewCommand = function(self)
 		if not isOpen then return end

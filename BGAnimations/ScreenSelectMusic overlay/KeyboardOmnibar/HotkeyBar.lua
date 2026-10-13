@@ -6,20 +6,40 @@
 
 local isCatNavActive = false
 
+local function IsCatNavActive()
+	if isCatNavActive then return true end
+	if SL and SL.Global and SL.Global.CategoryNavActive == true then return true end
+	local topScreen = SCREENMAN:GetTopScreen()
+	if topScreen and topScreen.GetChild then
+		local overlay = topScreen:GetChild("Overlay")
+		if overlay and overlay.GetChild then
+			local catMaster = overlay:GetChild("CategoryNavigationMaster")
+			if catMaster and catMaster.GetVisible and catMaster:GetVisible() then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 local af = Def.ActorFrame {
 	Name = "KeyboardHotkeyBar",
 	InitCommand = function(self)
 		self:draworder(105)
-		self:visible(ThemePrefs.Get("KeyboardFeatures") and not isCatNavActive)
+		local catActive = (ThemePrefs.Get("CategoryNavigation") == true) or IsCatNavActive()
+		isCatNavActive = catActive
+		self:visible(ThemePrefs.Get("KeyboardFeatures") and not catActive)
 	end,
 	OnCommand = function(self)
-		self:visible(ThemePrefs.Get("KeyboardFeatures") and not isCatNavActive)
+		local catActive = (ThemePrefs.Get("CategoryNavigation") == true) or IsCatNavActive()
+		isCatNavActive = catActive
+		self:visible(ThemePrefs.Get("KeyboardFeatures") and not catActive)
 	end,
 	ShowOmnibarMessageCommand = function(self)
 		self:visible(false)
 	end,
 	HideOmnibarMessageCommand = function(self)
-		self:visible(ThemePrefs.Get("KeyboardFeatures") and not isCatNavActive)
+		self:visible(ThemePrefs.Get("KeyboardFeatures") and not IsCatNavActive())
 	end,
 	CategoryNavigationModeChangedMessageCommand = function(self, params)
 		if params and params.active ~= nil then

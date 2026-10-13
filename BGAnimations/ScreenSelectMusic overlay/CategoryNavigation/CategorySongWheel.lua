@@ -6,9 +6,10 @@ local CategorySongWheel = {}
 
 local wheelX = IsUsingWideScreen() and (_screen.cx + _screen.w/4) or (_screen.cx + 160)
 local wheelW = IsUsingWideScreen() and 396 or 300
-local maxRows = 8
-local rowHeight = 38
-local startY = 100
+local maxRows = 11
+local rowHeight = 31
+local startY = 84
+_G.CategorySongWheel_MaxRows = maxRows
 
 -- Format helpers
 local function FormatLength(seconds)
@@ -71,7 +72,7 @@ local af = Def.ActorFrame {
 }
 
 -- -------------------------------------------------------------
--- Song Cards (1 through 8)
+-- Song Cards (1 through 11)
 -- -------------------------------------------------------------
 for r = 1, maxRows do
 	local cardY = startY + (r - 1) * rowHeight
@@ -112,17 +113,17 @@ for r = 1, maxRows do
 			if isSelected then
 				cardBg:diffuse(color("0.13, 0.17, 0.26, 0.98"))
 				titleText:diffuse(Color.White)
-				titleText:zoom(0.57)
+				titleText:zoom(0.52)
 				subText:diffuse(color("#ccddee"))
 				bpmLengthText:diffuse(Color.White)
-				bpmLengthText:zoom(0.46)
+				bpmLengthText:zoom(0.40)
 			else
 				cardBg:diffuse(color("0.06, 0.08, 0.12, 0.90"))
 				titleText:diffuse(color("#c8d6e5"))
-				titleText:zoom(0.53)
+				titleText:zoom(0.52)
 				subText:diffuse(color("#778899"))
 				bpmLengthText:diffuse(color("#778899"))
-				bpmLengthText:zoom(0.42)
+				bpmLengthText:zoom(0.40)
 			end
 
 			titleText:settext(entry.title or "")
@@ -147,34 +148,34 @@ for r = 1, maxRows do
 			favBorder:visible(isFav)
 		end,
 
-		-- Card backdrop
+		-- Card backdrop (compact 29px height)
 		Def.Quad {
 			Name = "CardBg",
 			InitCommand = function(self)
-				self:zoomto(wheelW, rowHeight - 3)
+				self:zoomto(wheelW, rowHeight - 2)
 				self:diffuse(color("0.06, 0.08, 0.12, 0.90"))
 			end,
 		},
 
-		-- Selection Highlight Quad
+		-- Selection Highlight Quad (alpha 0.28)
 		Def.Quad {
 			Name = "CardHighlight",
 			InitCommand = function(self)
-				self:zoomto(wheelW, rowHeight - 3)
-				self:diffuse(GetCurrentColor()):diffusealpha(0.32)
+				self:zoomto(wheelW, rowHeight - 2)
+				self:diffuse(GetCurrentColor()):diffusealpha(0.28)
 				self:visible(false)
 			end,
 			ColorSelectedMessageCommand = function(self)
-				self:diffuse(GetCurrentColor()):diffusealpha(0.32)
+				self:diffuse(GetCurrentColor()):diffusealpha(0.28)
 			end,
 		},
 
-		-- Left selection accent indicator (prominent 6px cursor bar)
+		-- Left selection accent indicator (5px solid theme color bar)
 		Def.Quad {
 			Name = "LeftAccent",
 			InitCommand = function(self)
-				self:x(-wheelW / 2 + 3)
-				self:zoomto(6, rowHeight - 3)
+				self:x(-wheelW / 2 + 2.5)
+				self:zoomto(5, rowHeight - 2)
 				self:diffuse(GetCurrentColor())
 				self:visible(false)
 			end,
@@ -183,77 +184,78 @@ for r = 1, maxRows do
 			end,
 		},
 
-		-- Favorite Glowing Gold Border around Meter Badge
+		-- Favorite Glowing Gold Border around Meter Badge (28x24px)
 		Def.Quad {
 			Name = "FavBadgeBorder",
 			InitCommand = function(self)
-				self:x(-wheelW / 2 + 24)
-				self:zoomto(32, 26)
+				self:x(-wheelW / 2 + 20)
+				self:zoomto(28, 24)
 				self:diffuse(color("#ffd700"))
 				self:visible(false)
 			end,
 		},
 
-		-- Difficulty Meter Badge Quad
+		-- Difficulty Meter Badge Quad (24x20px compact)
 		Def.Quad {
 			Name = "MeterBadgeBg",
 			InitCommand = function(self)
-				self:x(-wheelW / 2 + 24)
-				self:zoomto(28, 22)
+				self:x(-wheelW / 2 + 20)
+				self:zoomto(24, 20)
 				self:diffuse(color("0.15, 0.18, 0.26, 1.0"))
 			end,
 		},
 
-		-- Difficulty Meter Text
+		-- Difficulty Meter Text (zoom 0.50)
 		LoadFont("Common Normal") .. {
 			Name = "MeterText",
 			InitCommand = function(self)
-				self:x(-wheelW / 2 + 24)
-				self:zoom(0.58)
+				self:x(-wheelW / 2 + 20)
+				self:zoom(0.50)
 				self:shadowlength(0)
 				self:diffuse(Color.White)
 				self:settext("")
 			end,
 		},
 
-		-- Song Title
+		-- Song Title (zoom 0.52)
 		LoadFont("Common Normal") .. {
 			Name = "TitleText",
 			InitCommand = function(self)
-				self:x(-wheelW / 2 + 44)
-				self:y(-7)
+				self:x(-wheelW / 2 + 38)
+				self:y(-5)
 				self:horizalign(left)
-				self:zoom(0.55)
-				self:maxwidth((wheelW - 145) / 0.55)
+				self:zoom(0.52)
+				self:maxwidth((wheelW - 145) / 0.52)
 				self:diffuse(Color.White)
 				self:shadowlength(0)
 				self:settext("")
 			end,
 		},
 
-		-- Artist & Pack Subtitle
+		-- Artist & Pack Subtitle (zoom 0.38)
 		LoadFont("Common Normal") .. {
 			Name = "SubText",
 			InitCommand = function(self)
-				self:x(-wheelW / 2 + 44)
-				self:y(7)
+				self:x(-wheelW / 2 + 38)
+				self:y(6)
 				self:horizalign(left)
-				self:zoom(0.40)
-				self:maxwidth((wheelW - 145) / 0.40)
+				self:zoom(0.38)
+				self:maxwidth((wheelW - 145) / 0.38)
 				self:diffuse(color("#8899aa"))
 				self:shadowlength(0)
 				self:settext("")
 			end,
 		},
 
-		-- BPM & Length (Right aligned)
+		-- BPM & Length (Right aligned, zoom 0.40)
 		LoadFont("Common Normal") .. {
 			Name = "BpmLengthText",
 			InitCommand = function(self)
-				self:x(wheelW / 2 - 10)
+				self:x(wheelW / 2 - 8)
 				self:horizalign(right)
-				self:zoom(0.44)
-				self:diffuse(color("#aaccdd"))
+				self:zoom(0.40)
+				self:diffuse(color("#778899"))
+				self:shadowlength(0)
 				self:settext("")
 			end,
 		},
@@ -369,96 +371,70 @@ local emptyStateAF = Def.ActorFrame {
 af[#af + 1] = emptyStateAF
 
 -- -------------------------------------------------------------
--- Dual-Tier Navigation Control HUD (y = 401 & y = 424)
--- Tier 1: Primary Actions (Song Count, Play Confirmation, Browse, Return)
--- Tier 2: Hotkeys & Secondary Controls (Category, Filter, Search, Difficulty)
+-- Streamlined Unified Control HUD (y = 430, height = 24px)
+-- Consolidates all primary actions & hotkeys into a single ultra-sleek dock
 -- -------------------------------------------------------------
 local hudAF = Def.ActorFrame {
-	Name = "DualTierControlHUD",
+	Name = "UnifiedControlHUD",
+	InitCommand = function(self)
+		self:y(430)
+	end,
 
-	-- Deck 1: Primary Action Dock (y = 401)
-	Def.ActorFrame {
-		Name = "PrimaryActionDock",
+	-- Border hairline
+	Def.Quad {
 		InitCommand = function(self)
-			self:y(startY + trackH - rowHeight / 2 + 16)
+			self:zoomto(wheelW + 2, 24)
+			self:diffuse(color("0.16, 0.20, 0.28, 0.85"))
 		end,
-		-- Border hairline
-		Def.Quad {
-			InitCommand = function(self)
-				self:zoomto(wheelW + 2, 24)
-				self:diffuse(color("0.16, 0.20, 0.28, 0.85"))
-			end,
-		},
-		-- Background quad
-		Def.Quad {
-			InitCommand = function(self)
-				self:zoomto(wheelW, 22)
-				self:diffuse(color("0.07, 0.09, 0.14, 0.96"))
-			end,
-		},
-		-- Top accent hairline
-		Def.Quad {
-			InitCommand = function(self)
-				self:y(-10)
-				self:zoomto(wheelW, 1.5)
-				self:diffuse(GetCurrentColor()):diffusealpha(0.7)
-			end,
-			ColorSelectedMessageCommand = function(self)
-				self:diffuse(GetCurrentColor()):diffusealpha(0.7)
-			end,
-		},
-		LoadFont("Common Normal") .. {
-			Name = "PrimaryActionText",
-			InitCommand = function(self)
-				self:zoom(0.44)
-				self:shadowlength(0)
-				self:diffuse(Color.White)
-				self:settext("")
-			end,
-			UpdateCategoryUIMessageCommand = function(self, params)
-				if not params or not params.songs then return end
-				local total = #params.songs
-				local sel = params.selectedIdx or 1
-				if total == 0 then
-					self:settext("0 Songs   •   [Tab] Category   •   [Esc] Wheel Mode")
-					self:diffuse(color("#ffaa66"))
-				else
-					self:settext(string.format("Song %d of %d   •   [Enter / Start] Play   •   [Up/Down] Browse   •   [Esc] Wheel", sel, total))
-					self:diffuse(Color.White)
-				end
-			end,
-		},
 	},
 
-	-- Deck 2: Hotkeys & Filters Map (y = 424)
-	Def.ActorFrame {
-		Name = "SecondaryControlsDock",
+	-- Background quad
+	Def.Quad {
 		InitCommand = function(self)
-			self:y(startY + trackH - rowHeight / 2 + 39)
+			self:zoomto(wheelW, 22)
+			self:diffuse(color("0.07, 0.09, 0.14, 0.96"))
 		end,
-		-- Border hairline
-		Def.Quad {
-			InitCommand = function(self)
-				self:zoomto(wheelW + 2, 20)
-				self:diffuse(color("0.13, 0.17, 0.24, 0.75"))
-			end,
-		},
-		-- Background quad
-		Def.Quad {
-			InitCommand = function(self)
-				self:zoomto(wheelW, 18)
-				self:diffuse(color("0.05, 0.07, 0.11, 0.94"))
-			end,
-		},
-		LoadFont("Common Normal") .. {
-			Name = "SecondaryControlsText",
-			InitCommand = function(self)
-				self:zoom(0.38)
-				self:shadowlength(0)
-				self:diffuse(color("#aaccdd"))
-				self:settext("[Tab] Category   •   [Left/Right] Filter   •   Type to Search   •   [1-5] Diff   •   [Ctrl+D] Fav")
-			end,
-		},
+	},
+
+	-- Top accent hairline
+	Def.Quad {
+		Name = "HudTopAccent",
+		InitCommand = function(self)
+			self:y(-10)
+			self:zoomto(wheelW, 1.5)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.8)
+		end,
+		ColorSelectedMessageCommand = function(self)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.8)
+		end,
+	},
+
+	-- Unified Hotkeys and Status Text
+	LoadFont("Common Normal") .. {
+		Name = "UnifiedControlText",
+		InitCommand = function(self)
+			self:zoom(0.38)
+			self:shadowlength(0)
+			self:diffuse(Color.White)
+			self:maxwidth((wheelW - 14) / 0.38)
+			self:settext("")
+		end,
+		UpdateCategoryUIMessageCommand = function(self, params)
+			if not params or not params.songs then return end
+			local total = #params.songs
+			local sel = params.selectedIdx or 1
+			if total == 0 then
+				self:settext("0 Songs  •  [Tab] Category  •  [Left/Right] Filter  •  [Esc] Wheel Mode")
+				self:diffuse(color("#ffaa66"))
+			else
+				if IsUsingWideScreen() then
+					self:settext(string.format("Song %d of %d  •  [Enter] Play  •  [Up/Down] Browse  •  [1-5] Diff  •  [Tab] Category  •  [Left/Right] Filter  •  [Esc] Wheel", sel, total))
+				else
+					self:settext(string.format("Song %d/%d  •  [Enter] Play  •  [Up/Dn] Browse  •  [1-5] Diff  •  [Tab] Cat  •  [L/R] Filter  •  [Esc] Wheel", sel, total))
+				end
+				self:diffuse(Color.White)
+			end
+		end,
 	},
 }
 

@@ -18,7 +18,7 @@ local activeSubChipIdx = 1
 local currentSongs = {}
 local selectedSongIdx = 1
 local topVisibleIdx = 1
-local maxRows = 8
+local maxRows = 11
 
 local isShiftHeld = false
 local isCtrlHeld = false
@@ -65,9 +65,6 @@ SyncCurrentSong = function(song)
 				wheel:SetOpenSection(song:GetGroupName())
 			end
 			wheel:SelectSong(song)
-			wheel:Move(1)
-			wheel:Move(-1)
-			wheel:Move(0)
 		end
 	end
 
@@ -163,6 +160,9 @@ local function SetDifficultyDirect(diffKey)
 	if not targetDiff then return false end
 
 	local song = GAMESTATE:GetCurrentSong()
+	if not song and currentSongs[selectedSongIdx] then
+		song = currentSongs[selectedSongIdx].song
+	end
 	local style = GAMESTATE:GetCurrentStyle()
 	if not song or not style then return false end
 
@@ -197,6 +197,7 @@ end
 -- Enter Keyboard Mode (Hide native wheel, show category navigation)
 EnterKeyboardMode = function()
 	isNavActive = true
+	if SL and SL.Global then SL.Global.CategoryNavActive = true end
 	local top = SCREENMAN:GetTopScreen()
 	if top and top.GetMusicWheel then
 		local wheel = top:GetMusicWheel()
@@ -228,12 +229,13 @@ EnterKeyboardMode = function()
 
 	SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
 	BroadcastUIState()
-	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = true })
+	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = isNavActive })
 end
 
 -- Exit Keyboard Mode (Hide category navigation, restore normal scroll wheel)
 ExitKeyboardMode = function()
 	isNavActive = false
+	if SL and SL.Global then SL.Global.CategoryNavActive = false end
 	if rootActor then
 		rootActor:visible(false)
 	end
@@ -250,15 +252,12 @@ ExitKeyboardMode = function()
 					wheel:SetOpenSection(curSong:GetGroupName())
 				end
 				wheel:SelectSong(curSong)
-				wheel:Move(1)
-				wheel:Move(-1)
-				wheel:Move(0)
 			end
 		end
 	end
 
 	SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
-	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
+	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = isNavActive })
 end
 
 -- Master Actor Frame
@@ -269,6 +268,7 @@ local af = Def.ActorFrame {
 		local startInCatNav = (ThemePrefs.Get("CategoryNavigation") == true)
 		self:visible(startInCatNav)
 		isNavActive = startInCatNav
+		if SL and SL.Global then SL.Global.CategoryNavActive = startInCatNav end
 	end,
 	OnCommand = function(self)
 		local top = SCREENMAN:GetTopScreen()
@@ -279,6 +279,8 @@ local af = Def.ActorFrame {
 		local startInCatNav = (ThemePrefs.Get("CategoryNavigation") == true)
 		self:visible(startInCatNav)
 		isNavActive = startInCatNav
+		if SL and SL.Global then SL.Global.CategoryNavActive = startInCatNav end
+		MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = isNavActive })
 
 		if startInCatNav then
 			if top and top.GetMusicWheel then
@@ -360,16 +362,20 @@ local af = Def.ActorFrame {
 			top:RemoveInputCallback(CategoryInputHandler)
 		end
 		isNavActive = false
+		if SL and SL.Global then SL.Global.CategoryNavActive = false end
 	end,
 	ShowOmnibarMessageCommand = function(self)
 		self:visible(false)
 		wasNavActiveBeforeOmnibar = isNavActive
 		isNavActive = false
+		if SL and SL.Global then SL.Global.CategoryNavActive = false end
+		MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
 	end,
 	HideOmnibarMessageCommand = function(self)
 		if wasNavActiveBeforeOmnibar then
 			self:visible(true)
 			isNavActive = true
+			if SL and SL.Global then SL.Global.CategoryNavActive = true end
 			local curSong = GAMESTATE:GetCurrentSong()
 			if curSong then
 				local found = false
@@ -408,9 +414,12 @@ local af = Def.ActorFrame {
 				end
 			end
 			BroadcastUIState()
+			MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = true })
 		else
 			self:visible(false)
 			isNavActive = false
+			if SL and SL.Global then SL.Global.CategoryNavActive = false end
+			MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
 		end
 	end,
 	CodeMessageCommand = function(self, params)
@@ -562,11 +571,13 @@ CategoryInputHandler = function(event)
 	end
 
 	-- Number keys 1-5 (top row or numpad): Direct Difficulty Selection
-	local numKey = btn:match("^DeviceButton_([1-5])$") or btn:match("^DeviceButton_kp%s*([1-5])$") or btn:match("^DeviceButton_KP%s*([1-5])$")
+	local numKey = btn:match("^DeviceButton_([1-5])$")
+		or btn:match("^DeviceButton_[kK][pP]%s*([1-5])$")
+		or btn:match("^DeviceButton_[nN][uU][mM]%s*([1-5])$")
+		or btn:match("^([1-5])$")
 	if numKey then
-		if SetDifficultyDirect(numKey) then
-			return true
-		end
+		SetDifficultyDirect(numKey)
+		return true
 	end
 
 	-- Enter / Start:
