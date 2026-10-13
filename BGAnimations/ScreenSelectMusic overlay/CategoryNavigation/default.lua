@@ -348,6 +348,69 @@ local af = Def.ActorFrame {
 			Trace("TAB_TEST: Flag detected, starting tab repeat test sequence")
 			self:sleep(1.0):queuecommand("TestTabRepeat")
 		end
+
+		if FILEMAN:DoesFileExist("Save/run_sequence_test.flag") then
+			Trace("SEQUENCE_TEST: Flag detected, starting sequence toggle test")
+			self:sleep(1.0):queuecommand("TestSequenceStart")
+		end
+	end,
+	TestSequenceStartCommand = function(self)
+		Trace("SEQUENCE_TEST_STEP: step1_exit_keyboard_mode")
+		ExitKeyboardMode()
+		local redir1 = SCREENMAN:get_input_redirected(PLAYER_1)
+		Trace(string.format("SEQUENCE_TEST_STATE: step1 isNavActive=%s redir=%s", tostring(isNavActive), tostring(redir1)))
+		self:sleep(0.5):queuecommand("TestSequenceStep2")
+	end,
+	TestSequenceStep2Command = function(self)
+		Trace("SEQUENCE_TEST_STEP: step2_enter_keyboard_mode_via_tab")
+		CategoryInputHandler({
+			type = "InputEventType_FirstPress",
+			DeviceInput = { button = "DeviceButton_tab" },
+			GameButton = "Select",
+		})
+		local redir2 = SCREENMAN:get_input_redirected(PLAYER_1)
+		Trace(string.format("SEQUENCE_TEST_STATE: step2 isNavActive=%s redir=%s", tostring(isNavActive), tostring(redir2)))
+		self:sleep(0.5):queuecommand("TestSequenceStep3")
+	end,
+	TestSequenceStep3Command = function(self)
+		Trace("SEQUENCE_TEST_STEP: step3_exit_keyboard_mode_via_esc")
+		CategoryInputHandler({
+			type = "InputEventType_FirstPress",
+			DeviceInput = { button = "DeviceButton_escape" },
+			GameButton = "Back",
+		})
+		local redir3 = SCREENMAN:get_input_redirected(PLAYER_1)
+		Trace(string.format("SEQUENCE_TEST_STATE: step3 isNavActive=%s redir=%s", tostring(isNavActive), tostring(redir3)))
+		self:sleep(0.5):queuecommand("TestSequenceStep4")
+	end,
+	TestSequenceStep4Command = function(self)
+		Trace("SEQUENCE_TEST_STEP: step4_verify_inputs_on_wheel")
+		local handledRight = CategoryInputHandler({
+			type = "InputEventType_FirstPress",
+			DeviceInput = { button = "DeviceButton_right" },
+			GameButton = "MenuRight",
+		})
+		local handledLeft = CategoryInputHandler({
+			type = "InputEventType_FirstPress",
+			DeviceInput = { button = "DeviceButton_left" },
+			GameButton = "MenuLeft",
+		})
+		local handledEnter = CategoryInputHandler({
+			type = "InputEventType_FirstPress",
+			DeviceInput = { button = "DeviceButton_enter" },
+			GameButton = "Start",
+		})
+		local handledEsc = CategoryInputHandler({
+			type = "InputEventType_FirstPress",
+			DeviceInput = { button = "DeviceButton_escape" },
+			GameButton = "Back",
+		})
+
+		Trace(string.format("SEQUENCE_TEST_VERIFY: handledRight=%s handledLeft=%s handledEnter=%s handledEsc=%s",
+			tostring(handledRight), tostring(handledLeft), tostring(handledEnter), tostring(handledEsc)))
+
+		local success = (handledRight == false) and (handledLeft == false) and (handledEnter == false) and (handledEsc == false)
+		Trace(string.format("SEQUENCE_TEST_FINISH: success=%s", tostring(success)))
 	end,
 	TestTabRepeatCommand = function(self)
 		Trace("TAB_TEST_STEP: start")
@@ -551,6 +614,9 @@ CategoryInputHandler = function(event)
 
 	local btn = event.DeviceInput.button
 	local eventType = event.type
+
+	Trace(string.format("CAT_INPUT: type=%s btn=%s gameBtn=%s isNavActive=%s",
+		tostring(eventType), tostring(btn), tostring(event.GameButton), tostring(isNavActive)))
 
 	-- Modifier Tracking
 	if btn == "DeviceButton_left shift" or btn == "DeviceButton_right shift" then
