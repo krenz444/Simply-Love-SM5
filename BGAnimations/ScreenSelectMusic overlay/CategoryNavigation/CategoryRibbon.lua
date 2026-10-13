@@ -100,7 +100,7 @@ for i = 1, numTabs do
 			Name = "TabLabel",
 			InitCommand = function(self)
 				self:zoom(0.50)
-				self:shadowlength(0.2)
+				self:shadowlength(0)
 				self:settext(cat.name)
 				if i == 1 then
 					self:diffuse(Color.White)
@@ -154,8 +154,8 @@ local chipsContainer = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		Name = "ChipsText",
 		InitCommand = function(self)
-			self:zoom(0.45)
-			self:shadowlength(0.2)
+			self:zoom(0.44)
+			self:shadowlength(0)
 			self:diffuse(color("#ccddee"))
 			self:settext("")
 		end,
@@ -169,7 +169,7 @@ local chipsContainer = Def.ActorFrame {
 			if catId == "packs" then
 				local curChip = subChips[activeIdx]
 				local packName = curChip and curChip.label or "All Packs"
-				self:settext(string.format("< [   [%d/%d] %s (%d songs)   ] >", activeIdx, #subChips, packName, totalSongs))
+				self:settext(string.format("< Left   [%d/%d] %s (%d songs)   Right >", activeIdx, #subChips, packName, totalSongs))
 			else
 				local parts = {}
 				for idx, chip in ipairs(subChips) do
@@ -179,7 +179,7 @@ local chipsContainer = Def.ActorFrame {
 						parts[#parts + 1] = chip.label
 					end
 				end
-				local str = "< [   " .. table.concat(parts, "  •  ") .. "   ] >"
+				local str = "< Left   " .. table.concat(parts, "  •  ") .. "   Right >"
 				self:settext(str)
 			end
 		end,

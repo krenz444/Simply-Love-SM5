@@ -308,46 +308,99 @@ af[#af + 1] = Def.ActorFrame {
 }
 
 -- -------------------------------------------------------------
--- Summary Footer Pill (y = 414)
+-- Dual-Tier Navigation Control HUD (y = 401 & y = 424)
+-- Tier 1: Primary Actions (Song Count, Play Confirmation, Browse, Return)
+-- Tier 2: Hotkeys & Secondary Controls (Category, Filter, Search, Difficulty)
 -- -------------------------------------------------------------
-af[#af + 1] = Def.ActorFrame {
-	Name = "SummaryPill",
-	InitCommand = function(self)
-		self:y(startY + trackH - rowHeight / 2 + 16)
-	end,
-	-- Border hairline
-	Def.Quad {
+local hudAF = Def.ActorFrame {
+	Name = "DualTierControlHUD",
+
+	-- Deck 1: Primary Action Dock (y = 401)
+	Def.ActorFrame {
+		Name = "PrimaryActionDock",
 		InitCommand = function(self)
-			self:zoomto(wheelW + 2, 22)
-			self:diffuse(color("0.16, 0.20, 0.28, 0.8"))
+			self:y(startY + trackH - rowHeight / 2 + 16)
 		end,
+		-- Border hairline
+		Def.Quad {
+			InitCommand = function(self)
+				self:zoomto(wheelW + 2, 24)
+				self:diffuse(color("0.16, 0.20, 0.28, 0.85"))
+			end,
+		},
+		-- Background quad
+		Def.Quad {
+			InitCommand = function(self)
+				self:zoomto(wheelW, 22)
+				self:diffuse(color("0.07, 0.09, 0.14, 0.96"))
+			end,
+		},
+		-- Top accent hairline
+		Def.Quad {
+			InitCommand = function(self)
+				self:y(-10)
+				self:zoomto(wheelW, 1.5)
+				self:diffuse(GetCurrentColor()):diffusealpha(0.7)
+			end,
+			ColorSelectedMessageCommand = function(self)
+				self:diffuse(GetCurrentColor()):diffusealpha(0.7)
+			end,
+		},
+		LoadFont("Common Normal") .. {
+			Name = "PrimaryActionText",
+			InitCommand = function(self)
+				self:zoom(0.44)
+				self:shadowlength(0)
+				self:diffuse(Color.White)
+				self:settext("")
+			end,
+			UpdateCategoryUIMessageCommand = function(self, params)
+				if not params or not params.songs then return end
+				local total = #params.songs
+				local sel = params.selectedIdx or 1
+				if total == 0 then
+					self:settext("0 Songs   •   [Tab] Category   •   [Esc] Wheel Mode")
+					self:diffuse(color("#ffaa66"))
+				else
+					self:settext(string.format("Song %d of %d   •   [Enter / Start] Play   •   [Up/Down] Browse   •   [Esc] Wheel", sel, total))
+					self:diffuse(Color.White)
+				end
+			end,
+		},
 	},
-	-- Background quad
-	Def.Quad {
+
+	-- Deck 2: Hotkeys & Filters Map (y = 424)
+	Def.ActorFrame {
+		Name = "SecondaryControlsDock",
 		InitCommand = function(self)
-			self:zoomto(wheelW, 20)
-			self:diffuse(color("0.07, 0.09, 0.13, 0.95"))
+			self:y(startY + trackH - rowHeight / 2 + 39)
 		end,
-	},
-	LoadFont("Common Normal") .. {
-		Name = "SummaryText",
-		InitCommand = function(self)
-			self:zoom(0.45)
-			self:shadowlength(0.2)
-			self:diffuse(color("#8899aa"))
-			self:settext("")
-		end,
-		UpdateCategoryUIMessageCommand = function(self, params)
-			if not params or not params.songs then return end
-			local total = #params.songs
-			local sel = params.selectedIdx or 1
-			if total == 0 then
-				self:settext("0 Songs   •   [Tab] Category   •   [ [ / ] ] Filter   •   [Esc] Wheel Mode")
-			else
-				self:settext(string.format("Song %d of %d   •   [Tab] Category   •   [ [ / ] ] Filter   •   [Esc] Wheel Mode", sel, total))
-			end
-		end,
+		-- Border hairline
+		Def.Quad {
+			InitCommand = function(self)
+				self:zoomto(wheelW + 2, 20)
+				self:diffuse(color("0.13, 0.17, 0.24, 0.75"))
+			end,
+		},
+		-- Background quad
+		Def.Quad {
+			InitCommand = function(self)
+				self:zoomto(wheelW, 18)
+				self:diffuse(color("0.05, 0.07, 0.11, 0.94"))
+			end,
+		},
+		LoadFont("Common Normal") .. {
+			Name = "SecondaryControlsText",
+			InitCommand = function(self)
+				self:zoom(0.40)
+				self:shadowlength(0)
+				self:diffuse(color("#aaccdd"))
+				self:settext("[Tab] Category   •   [Left/Right] Filter   •   Type to Search   •   [1-5] Diff")
+			end,
+		},
 	},
 }
+
+af[#af + 1] = hudAF
 
 return af
