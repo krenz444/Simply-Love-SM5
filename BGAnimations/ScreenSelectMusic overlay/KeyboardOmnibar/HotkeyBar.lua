@@ -128,7 +128,7 @@ local bottomLegend = Def.ActorFrame {
 			self:zoom(0.44)
 			self:diffuse(color("#ddeeff"))
 			self:shadowlength(0.2)
-			self:settext("[ [ / ] ] Skip Pack   |   [ 1-5 ] Diff   |   [ S ] Sort")
+			self:settext("[ [ / ] ] Skip Pack   |   [ Ctrl+S ] Sort   |   [ Ctrl+1-5 ] Diff")
 		end,
 	},
 }

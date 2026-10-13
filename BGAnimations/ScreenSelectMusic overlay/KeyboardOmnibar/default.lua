@@ -566,14 +566,80 @@ local function KeyboardInputHandler(event)
 	-- CASE 2: Omnibar is CLOSED (ScreenSelectMusic normal state)
 	-----------------------------------------------------------------
 	local logicalChar = KeyboardLayout.TranslateButton(btn, false)
+	local typedChar = KeyboardLayout.TranslateButton(btn, isShiftHeld)
 
-	-- Trigger 1: Slash [/] or Ctrl+F opens Omnibar
-	if btn == "DeviceButton_slash" or btn == "DeviceButton_/" or logicalChar == "/" or (btn == "DeviceButton_f" and isCtrlHeld) or (logicalChar == "f" and isCtrlHeld) then
+	-- 1. Modified / Control Key Hotkeys (when Ctrl is held)
+	if isCtrlHeld then
+		-- Ctrl+F or Ctrl+K: Open Omnibar (empty)
+		if btn == "DeviceButton_f" or btn == "DeviceButton_k" or logicalChar == "f" or logicalChar == "k" then
+			OpenOmnibar("")
+			return true
+		end
+
+		-- Ctrl+S: Cycle Sort Order
+		if btn == "DeviceButton_s" or logicalChar == "s" then
+			local top = SCREENMAN:GetTopScreen()
+			if top and top.GetMusicWheel then
+				local curSort = GAMESTATE:GetSortOrder()
+				local nextSort = "SortOrder_Group"
+				if curSort == "SortOrder_Group" then nextSort = "SortOrder_Title"
+				elseif curSort == "SortOrder_Title" then nextSort = "SortOrder_Artist"
+				elseif curSort == "SortOrder_Artist" then nextSort = "SortOrder_BPM"
+				elseif curSort == "SortOrder_BPM" then nextSort = "SortOrder_Meter"
+				elseif curSort == "SortOrder_Meter" then nextSort = "SortOrder_Preferred"
+				else nextSort = "SortOrder_Group" end
+				top:GetMusicWheel():ChangeSort(nextSort)
+			end
+			return true
+		end
+
+		-- Ctrl+P: Practice Mode
+		if btn == "DeviceButton_p" or logicalChar == "p" then
+			local top = SCREENMAN:GetTopScreen()
+			if top and GAMESTATE:GetCurrentSong() then
+				top:SetNextScreenName("ScreenPractice")
+				top:StartTransitioningScreen("SM_GoToNextScreen")
+			end
+			return true
+		end
+
+		-- Ctrl+G: GrooveStats Leaderboard
+		if btn == "DeviceButton_g" or logicalChar == "g" then
+			local top = SCREENMAN:GetTopScreen()
+			if top and top:GetChild("Overlay") then
+				top:GetChild("Overlay"):playcommand("ShowLeaderboard")
+			end
+			return true
+		end
+
+		-- Ctrl+D or Ctrl+B: Toggle Favorite
+		if btn == "DeviceButton_d" or btn == "DeviceButton_b" or logicalChar == "d" or logicalChar == "b" then
+			for pn in ivalues(GAMESTATE:GetHumanPlayers()) do
+				addOrRemoveFavorite(pn)
+				break
+			end
+			return true
+		end
+
+		-- Ctrl+1 to Ctrl+5: Direct Difficulty Selection
+		local numKey = btn:match("^DeviceButton_([1-5])$")
+		if numKey then
+			SetDifficultyDirect(numKey)
+			return true
+		end
+
+		-- Pass any other unhandled Ctrl combinations through
+		return false
+	end
+
+	-- 2. Non-Ctrl Navigation Hotkeys
+	-- Slash [/]: Open Omnibar (empty)
+	if btn == "DeviceButton_slash" or btn == "DeviceButton_/" or logicalChar == "/" then
 		OpenOmnibar("")
 		return true
 	end
 
-	-- Hotkey: [ and ] jump whole pack (PreviousGroup / NextGroup)
+	-- [ and ]: Skip Pack (PreviousGroup / NextGroup)
 	if btn == "DeviceButton_left bracket" or btn == "DeviceButton_[" then
 		JumpGroup(-1)
 		return true
@@ -582,67 +648,17 @@ local function KeyboardInputHandler(event)
 		return true
 	end
 
-	-- Hotkey: 1 to 5 sets difficulty directly
-	local numKey = btn:match("^DeviceButton_([1-5])$")
-	if numKey and not isShiftHeld and not isCtrlHeld then
-		SetDifficultyDirect(numKey)
-		return true
-	end
-
-	-- Hotkey: F toggles Favorite
-	if logicalChar == "f" and not isCtrlHeld then
-		for pn in ivalues(GAMESTATE:GetHumanPlayers()) do
-			addOrRemoveFavorite(pn)
-			break
-		end
-		return true
-	end
-
-	-- Hotkey: L opens GrooveStats Leaderboard
-	if logicalChar == "l" and not isCtrlHeld then
-		local top = SCREENMAN:GetTopScreen()
-		if top and top:GetChild("Overlay") then
-			top:GetChild("Overlay"):playcommand("ShowLeaderboard")
-		end
-		return true
-	end
-
-	-- Hotkey: P enters Practice Mode
-	if logicalChar == "p" and not isCtrlHeld then
-		local top = SCREENMAN:GetTopScreen()
-		if top and GAMESTATE:GetCurrentSong() then
-			top:SetNextScreenName("ScreenPractice")
-			top:StartTransitioningScreen("SM_GoToNextScreen")
-		end
-		return true
-	end
-
-	-- Hotkey: S cycles sort orders
-	if logicalChar == "s" and not isCtrlHeld then
-		local top = SCREENMAN:GetTopScreen()
-		if top and top.GetMusicWheel then
-			local curSort = GAMESTATE:GetSortOrder()
-			local nextSort = "SortOrder_Group"
-			if curSort == "SortOrder_Group" then nextSort = "SortOrder_Title"
-			elseif curSort == "SortOrder_Title" then nextSort = "SortOrder_Artist"
-			elseif curSort == "SortOrder_Artist" then nextSort = "SortOrder_BPM"
-			elseif curSort == "SortOrder_BPM" then nextSort = "SortOrder_Meter"
-			elseif curSort == "SortOrder_Meter" then nextSort = "SortOrder_Preferred"
-			else nextSort = "SortOrder_Group" end
-			top:GetMusicWheel():ChangeSort(nextSort)
-		end
-		return true
-	end
-
-	-- Hotkey: Space toggles preview music
+	-- Space: Toggle audio sample preview
 	if btn == "DeviceButton_space" then
 		play_sample_music()
 		return true
 	end
 
-	-- Trigger 2: Any OTHER letter keys (A-Z) open Omnibar immediately with that letter
-	if logicalChar and logicalChar:match("^%a$") and not isCtrlHeld then
-		OpenOmnibar(isShiftHeld and logicalChar:upper() or logicalChar)
+	-- 3. INSTANT TYPE-TO-SEARCH:
+	-- Any printable character immediately opens Omnibar and pre-fills that character!
+	-- Matches all letters (A-Z, a-z), numbers (0-9), and search symbols (!, -, etc.)
+	if typedChar and #typedChar == 1 and typedChar ~= " " and typedChar ~= "[" and typedChar ~= "]" then
+		OpenOmnibar(typedChar)
 		return true
 	end
 
