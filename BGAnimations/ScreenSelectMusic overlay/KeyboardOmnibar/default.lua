@@ -787,6 +787,9 @@ local af = Def.ActorFrame {
 			top:RemoveInputCallback(KeyboardInputHandler)
 		end
 	end,
+	OpenOmnibarWithQueryMessageCommand = function(self, params)
+		OpenOmnibar(params and params.query or "")
+	end,
 	TriggerAudioPreviewCommand = function(self)
 		if not isOpen then return end
 		local selected = candidates[selectedIndex]

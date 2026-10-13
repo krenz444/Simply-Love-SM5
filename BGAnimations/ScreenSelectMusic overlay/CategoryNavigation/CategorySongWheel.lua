@@ -31,8 +31,8 @@ end
 
 local function GetSongDisplayMeter(entry)
 	if not entry then return "", Color.White end
-	local p1 = GAMESTATE:IsPlayerEnabled(PLAYER_1) and PLAYER_1 or nil
-	local pDiff = p1 and GAMESTATE:GetPreferredDifficulty(p1) or "Difficulty_Hard"
+	local p = (GAMESTATE:IsPlayerEnabled(PLAYER_1) and PLAYER_1) or (GAMESTATE:IsPlayerEnabled(PLAYER_2) and PLAYER_2) or nil
+	local pDiff = p and GAMESTATE:GetPreferredDifficulty(p) or "Difficulty_Hard"
 
 	if entry.meters and entry.meters[pDiff] then
 		return tostring(entry.meters[pDiff]), DifficultyColor(pDiff)

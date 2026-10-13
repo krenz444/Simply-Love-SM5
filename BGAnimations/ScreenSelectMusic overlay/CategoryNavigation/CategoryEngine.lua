@@ -172,6 +172,7 @@ function CategoryEngine.GetSongs(categoryId, subChipId)
 
 		for _, entry in ipairs(allEntries) do
 			local cleanTitle = (entry.title or ""):gsub("^[!%s\"'%(%[]*", "")
+			if cleanTitle == "" then cleanTitle = entry.title or "" end
 			if cleanTitle:match(bucketDef.chars) then
 				results[#results + 1] = entry
 			end

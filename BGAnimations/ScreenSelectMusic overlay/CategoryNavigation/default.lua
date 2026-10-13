@@ -330,6 +330,18 @@ local af = Def.ActorFrame {
 		if wasNavActiveBeforeOmnibar then
 			self:visible(true)
 			isNavActive = true
+			local curSong = GAMESTATE:GetCurrentSong()
+			if curSong and #currentSongs > 0 then
+				for idx, entry in ipairs(currentSongs) do
+					if entry.song == curSong then
+						selectedSongIdx = idx
+						if selectedSongIdx < topVisibleIdx or selectedSongIdx >= topVisibleIdx + maxRows then
+							topVisibleIdx = math.max(1, math.min(#currentSongs - maxRows + 1, selectedSongIdx - 2))
+						end
+						break
+					end
+				end
+			end
 			BroadcastUIState()
 		else
 			self:visible(false)
