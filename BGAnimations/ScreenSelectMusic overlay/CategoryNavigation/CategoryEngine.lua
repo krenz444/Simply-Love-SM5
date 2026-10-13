@@ -1,31 +1,37 @@
 -- CategoryEngine.lua
--- In-memory category indexing and multi-facet filtering engine for Simply Love / ITGmania.
--- Categorizes the entire song library in <80ms without touching the disk during gameplay.
+-- In-memory category indexing and multi-facet filtering for Simply Love / ITGmania Keyboard Mode.
+--
+-- Returned song lists are shared with the search index and MUST be treated as read-only.
 
 local SongSearchEngine = LoadActor("../KeyboardOmnibar/SongSearchEngine.lua")
 
 local CategoryEngine = {}
 
 -- -------------------------------------------------------------
--- 1. Category Definitions
+-- 1. Category Definitions (order = tab order; every entry is reachable from the ribbon)
 -- -------------------------------------------------------------
 local categories = {
-	{ id = "packs",       name = "PACKS",     icon = "📁", desc = "Browse by Song Pack & Series" },
-	{ id = "favorites",   name = "FAVORITES", icon = "⭐", desc = "Player Favorites & Recent Songs" },
-	{ id = "meters",      name = "METERS",    icon = "🎯", desc = "Browse by Difficulty Tier" },
-	{ id = "bpm",         name = "BPM",       icon = "⚡", desc = "Filter by Speed & Energy" },
-	{ id = "groovestats", name = "RANKED",    icon = "🏆", desc = "Online Events & Ranked Pool" },
-	{ id = "alphabet",    name = "A-Z",       icon = "🔤", desc = "Alphabetical Song Catalog" },
-	{ id = "search",      name = "SEARCH",    icon = "🔍", desc = "Universal Omnibar Search" },
+	{ id = "packs",     name = "PACKS",     desc = "Browse by Song Pack & Series" },
+	{ id = "favorites", name = "FAVORITES", desc = "Player Favorites & Recent Songs" },
+	{ id = "meters",    name = "METERS",    desc = "Songs that have a chart in a difficulty tier" },
+	{ id = "bpm",       name = "BPM",       desc = "Filter by Speed & Energy" },
+	{ id = "played",    name = "PLAYED",    desc = "Songs you have played, cleared or not yet tried" },
+	{ id = "alphabet",  name = "A-Z",       desc = "Alphabetical Song Catalog" },
 }
 
 function CategoryEngine.GetCategories()
 	return categories
 end
 
+-- Exposed so every consumer shares the single search/index instance.
+function CategoryEngine.GetSearchEngine()
+	return SongSearchEngine
+end
+
 -- -------------------------------------------------------------
--- 2. Sub-Category Definitions & Query Handlers
+-- 2. Sub-Category Definitions
 -- -------------------------------------------------------------
+-- METERS: a song matches a tier when ANY of its charts (current style, no edits) falls in range.
 local meterTiers = {
 	{ id = "all",      label = "All Levels",     minM = 1,  maxM = 99 },
 	{ id = "warmup",   label = "1-8 Warmup",     minM = 1,  maxM = 8  },
@@ -36,13 +42,16 @@ local meterTiers = {
 	{ id = "elite",    label = "19+ Stamina",    minM = 19, maxM = 99 },
 }
 
+-- BPM tiers are half-open [minB, maxB) on the song's MAX display BPM, so the tiers partition
+-- the library: no BPM (including fractional ones like 129.5) falls between two tiers and
+-- a boundary BPM (155, 180, 210) belongs to exactly one tier.
 local bpmTiers = {
-	{ id = "all",       label = "All BPM",       minB = 0,   maxB = 9999 },
-	{ id = "chill",     label = "< 130 Chill",   minB = 0,   maxB = 129  },
-	{ id = "standard",  label = "130-155 Groov", minB = 130, maxB = 155  },
-	{ id = "energy",    label = "155-180 Ener",  minB = 155, maxB = 180  },
-	{ id = "fast",      label = "180-210 Fast",  minB = 180, maxB = 210  },
-	{ id = "speed",     label = "210+ Speed",    minB = 210, maxB = 9999 },
+	{ id = "all",       label = "All BPM",       minB = 0,   maxB = math.huge },
+	{ id = "chill",     label = "< 130 Chill",   minB = 0,   maxB = 130 },
+	{ id = "standard",  label = "130-155 Groov", minB = 130, maxB = 155 },
+	{ id = "energy",    label = "155-180 Ener",  minB = 155, maxB = 180 },
+	{ id = "fast",      label = "180-210 Fast",  minB = 180, maxB = 210 },
+	{ id = "speed",     label = "210+ Speed",    minB = 210, maxB = math.huge },
 }
 
 local alphabetBuckets = {
@@ -57,7 +66,6 @@ local alphabetBuckets = {
 	{ id = "vz",  label = "V - Z",  chars = "^[v-zV-Z]" },
 }
 
--- Return the list of sub-category chips for a given category
 function CategoryEngine.GetSubChips(categoryId)
 	if categoryId == "meters" then
 		return meterTiers
@@ -66,13 +74,12 @@ function CategoryEngine.GetSubChips(categoryId)
 	elseif categoryId == "alphabet" then
 		return alphabetBuckets
 	elseif categoryId == "favorites" then
-		local chips = {
+		return {
 			{ id = "all_fav",  label = "All Favorites" },
 			{ id = "p1_fav",   label = "P1 Favorites" },
 			{ id = "p2_fav",   label = "P2 Favorites" },
 			{ id = "recents",  label = "Recent Songs" },
 		}
-		return chips
 	elseif categoryId == "packs" then
 		local groups = SONGMAN:GetSongGroupNames() or {}
 		local chips = { { id = "all", label = "All Packs (" .. tostring(#groups) .. ")" } }
@@ -80,18 +87,118 @@ function CategoryEngine.GetSubChips(categoryId)
 			chips[#chips + 1] = { id = gName, label = gName }
 		end
 		return chips
-	elseif categoryId == "groovestats" then
+	elseif categoryId == "played" then
 		return {
-			{ id = "all",     label = "All Ranked" },
-			{ id = "events",  label = "Active Events" },
-			{ id = "unplayed",label = "Unplayed Charts" },
+			{ id = "all",      label = "All Played" },
+			{ id = "unplayed", label = "Unplayed" },
+			{ id = "cleared",  label = "Cleared" },
 		}
 	end
 	return { { id = "all", label = "All" } }
 end
 
+-- Meter range of the active METERS tier (nil for every other category / "All Levels").
+-- The song wheel uses it to show the meter of the chart that actually matched.
+function CategoryEngine.GetMeterRange(categoryId, subChipId)
+	if categoryId ~= "meters" then return nil end
+	for _, t in ipairs(meterTiers) do
+		if t.id == subChipId and t.id ~= "all" then return t.minM, t.maxM end
+	end
+	return nil
+end
+
+function CategoryEngine.GetEmptyHint(categoryId, subChipId)
+	if categoryId == "favorites" and subChipId == "recents" then
+		return "No recent songs yet.\nSongs you start or search for appear here."
+	elseif categoryId == "favorites" then
+		return "You haven't added any favorites yet.\nPress [ Ctrl + D ] to favorite any song!"
+	elseif categoryId == "played" and subChipId ~= "unplayed" then
+		return "No scores recorded yet.\nFinish a song and it will show up here."
+	end
+	return "No songs match this category filter.\nPress [ Left / Right ] or [ Tab ] to browse other categories."
+end
+
 -- -------------------------------------------------------------
--- 3. Query & Filter Implementation
+-- 3. PLAYED status (from the engine's per-profile high score lists)
+-- -------------------------------------------------------------
+-- status[song_dir] = 0 never played, 1 played, 2 cleared (some score that is not a fail)
+local playStatus = nil
+
+function CategoryEngine.InvalidatePlayCache()
+	playStatus = nil
+end
+
+local function ProfilesToCheck()
+	local list = {}
+	for pn in ivalues(GAMESTATE:GetEnabledPlayers()) do
+		if PROFILEMAN:IsPersistentProfile(pn) then
+			list[#list + 1] = PROFILEMAN:GetProfile(pn)
+		end
+	end
+	if #list == 0 then list[1] = PROFILEMAN:GetMachineProfile() end
+	return list
+end
+
+local function BuildPlayStatus(allEntries)
+	local status = {}
+	local style = GAMESTATE:GetCurrentStyle()
+	local stepsType = style and style:GetStepsType() or nil
+	local profiles = ProfilesToCheck()
+
+	for _, e in ipairs(allEntries) do
+		local level = 0
+		local song = e.song
+		if song and stepsType then
+			for steps in ivalues(song:GetStepsByStepsType(stepsType)) do
+				for _, prof in ipairs(profiles) do
+					local list = prof and prof:GetHighScoreList(song, steps)
+					if list then
+						for hs in ivalues(list:GetHighScores()) do
+							if level < 1 then level = 1 end
+							if hs:GetGrade() ~= "Grade_Failed" then level = 2 end
+						end
+					end
+				end
+				if level == 2 then break end
+			end
+		end
+		status[e.song_dir] = level
+	end
+	return status
+end
+
+local function GetPlayStatus(allEntries)
+	if not playStatus then
+		local ok, res = pcall(BuildPlayStatus, allEntries)
+		if ok then
+			playStatus = res
+		else
+			Warn("CategoryEngine: could not read high scores: " .. tostring(res))
+			playStatus = {}
+		end
+	end
+	return playStatus
+end
+
+-- -------------------------------------------------------------
+-- 4. Favorites: same source as the gold badge (SL[pn].Favorites, a list of Song objects)
+-- -------------------------------------------------------------
+local function FavoriteDirSet(playerNumbers)
+	local set = {}
+	for _, pn in ipairs(playerNumbers) do
+		local slp = SL[ToEnumShortString(pn)]
+		if slp and slp.Favorites and GAMESTATE:IsPlayerEnabled(pn) then
+			for song in ivalues(slp.Favorites) do
+				local dir = song.GetSongDir and song:GetSongDir()
+				if dir then set[dir] = true end
+			end
+		end
+	end
+	return set
+end
+
+-- -------------------------------------------------------------
+-- 5. Query & Filter Implementation
 -- -------------------------------------------------------------
 function CategoryEngine.GetSongs(categoryId, subChipId)
 	local allEntries = SongSearchEngine.GetIndex()
@@ -101,96 +208,50 @@ function CategoryEngine.GetSongs(categoryId, subChipId)
 	local results = {}
 
 	if categoryId == "packs" then
-		if subChipId == "all" then
-			return allEntries
-		else
-			for _, entry in ipairs(allEntries) do
-				if entry.group == subChipId then
-					results[#results + 1] = entry
-				end
-			end
+		if subChipId == "all" then return allEntries end
+		for _, entry in ipairs(allEntries) do
+			if entry.group == subChipId then results[#results + 1] = entry end
 		end
 
 	elseif categoryId == "meters" then
-		local tierDef = nil
-		for _, t in ipairs(meterTiers) do
-			if t.id == subChipId then
-				tierDef = t
-				break
-			end
-		end
-
-		if not tierDef or tierDef.id == "all" then
-			return allEntries
-		end
-
+		local minM, maxM = CategoryEngine.GetMeterRange("meters", subChipId)
+		if not minM then return allEntries end
 		for _, entry in ipairs(allEntries) do
-			local matched = false
-			if entry.meterList then
-				for _, m in ipairs(entry.meterList) do
-					if m >= tierDef.minM and m <= tierDef.maxM then
-						matched = true
-						break
-					end
+			for _, m in ipairs(entry.meterList or {}) do
+				if m >= minM and m <= maxM then
+					results[#results + 1] = entry
+					break
 				end
-			end
-			if matched then
-				results[#results + 1] = entry
 			end
 		end
 
 	elseif categoryId == "bpm" then
-		local tierDef = nil
-		for _, t in ipairs(bpmTiers) do
-			if t.id == subChipId then
-				tierDef = t
-				break
-			end
-		end
-
-		if not tierDef or tierDef.id == "all" then
-			return allEntries
-		end
-
+		local tier
+		for _, t in ipairs(bpmTiers) do if t.id == subChipId then tier = t break end end
+		if not tier or tier.id == "all" then return allEntries end
 		for _, entry in ipairs(allEntries) do
 			local maxBpm = entry.bpms and entry.bpms[2] or 0
-			if maxBpm >= tierDef.minB and maxBpm <= tierDef.maxB then
+			if maxBpm >= tier.minB and maxBpm < tier.maxB then
 				results[#results + 1] = entry
 			end
 		end
 
 	elseif categoryId == "alphabet" then
-		local bucketDef = nil
-		for _, b in ipairs(alphabetBuckets) do
-			if b.id == subChipId then
-				bucketDef = b
-				break
-			end
-		end
-
-		if not bucketDef then return allEntries end
-
+		local bucket
+		for _, b in ipairs(alphabetBuckets) do if b.id == subChipId then bucket = b break end end
+		if not bucket then return allEntries end
 		for _, entry in ipairs(allEntries) do
 			local cleanTitle = (entry.title or ""):gsub("^[!%s\"'%(%[]*", "")
 			if cleanTitle == "" then cleanTitle = entry.title or "" end
-			if cleanTitle:match(bucketDef.chars) then
-				results[#results + 1] = entry
-			end
+			if cleanTitle:match(bucket.chars) then results[#results + 1] = entry end
 		end
 
 	elseif categoryId == "favorites" then
-		local favSet = {}
-
 		if subChipId == "recents" then
-			local recentsList = SongSearchEngine.GetRecentSongDirs() or {}
 			local recentMap = {}
-			for idx, rDir in ipairs(recentsList) do
-				recentMap[rDir] = idx
-			end
+			for idx, dir in ipairs(SongSearchEngine.GetRecentSongDirs() or {}) do recentMap[dir] = idx end
 			for _, entry in ipairs(allEntries) do
-				if recentMap[entry.song_dir] then
-					results[#results + 1] = entry
-				end
+				if recentMap[entry.song_dir] then results[#results + 1] = entry end
 			end
 			table.sort(results, function(a, b)
 				return (recentMap[a.song_dir] or 999) < (recentMap[b.song_dir] or 999)
@@ -198,54 +259,28 @@ function CategoryEngine.GetSongs(categoryId, subChipId)
 			return results
 		end
 
-		-- Load favorites files
-		local function loadFavFile(pn)
-			if type(getFavoritesPath) ~= "function" then return end
-			local p = getFavoritesPath(pn)
-			if FILEMAN:DoesFileExist(p) then
-				local content = lua.ReadFile(p) or ""
-				for line in content:gmatch("[^\r\n]+") do
-					local c = line:gsub("^%s*(.-)%s*$", "%1")
-					if #c > 0 then
-						favSet[c] = true
-						local subPart = c:match("/([^/]+)/?$")
-						if subPart then favSet[subPart] = true end
-					end
-				end
-			end
-		end
-
-		if subChipId == "p1_fav" then
-			loadFavFile(PLAYER_1)
-		elseif subChipId == "p2_fav" then
-			loadFavFile(PLAYER_2)
-		else
-			loadFavFile(PLAYER_1)
-			loadFavFile(PLAYER_2)
-		end
-
+		local who
+		if subChipId == "p1_fav" then who = { PLAYER_1 }
+		elseif subChipId == "p2_fav" then who = { PLAYER_2 }
+		else who = { PLAYER_1, PLAYER_2 } end
+		local favDirs = FavoriteDirSet(who)
 		for _, entry in ipairs(allEntries) do
-			local matched = false
-			if favSet[entry.song_dir] or (entry.folder and favSet[entry.folder]) or favSet[entry.title] then
-				matched = true
-			elseif entry.song_dir then
-				for favLine, _ in pairs(favSet) do
-					if entry.song_dir:find(favLine, 1, true) then
-						matched = true
-						break
-					end
-				end
-			end
-			if matched then
+			if favDirs[entry.song_dir] then results[#results + 1] = entry end
+		end
+
+	elseif categoryId == "played" then
+		local status = GetPlayStatus(allEntries)
+		for _, entry in ipairs(allEntries) do
+			local level = status[entry.song_dir] or 0
+			if subChipId == "unplayed" then
+				if level == 0 then results[#results + 1] = entry end
+			elseif subChipId == "cleared" then
+				if level == 2 then results[#results + 1] = entry end
+			elseif level >= 1 then
 				results[#results + 1] = entry
 			end
 		end
 
-	elseif categoryId == "groovestats" then
-		-- Ranked pool: all indexed songs
-		for _, entry in ipairs(allEntries) do
-			results[#results + 1] = entry
-		end
 	else
 		results = allEntries
 	end

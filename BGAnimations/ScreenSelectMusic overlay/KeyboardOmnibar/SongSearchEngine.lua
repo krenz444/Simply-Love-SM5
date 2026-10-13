@@ -1,10 +1,19 @@
 -- SongSearchEngine.lua
 -- High-performance in-memory search and indexing for ITGmania / Simply Love
+--
+-- This file is LoadActor()'d from several places (Omnibar, CategoryEngine, ...). LoadActor runs
+-- the chunk every time, so without the guard below each caller got its own module instance:
+-- three copies of the index (and of the recents/history caches), each rebuilt on every
+-- ScreenSelectMusic entry. The first instance is kept on SL.Global and shared from then on.
+if SL and SL.Global and SL.Global.SongSearchEngineShared then
+	return SL.Global.SongSearchEngineShared
+end
 
 local SongSearchEngine = {}
+if SL and SL.Global then SL.Global.SongSearchEngineShared = SongSearchEngine end
 
-local allSongsCache = nil
 local currentStyleCached = nil
+local cachedSongCount = -1
 local indexData = {}
 local songDirMap = {}
 
@@ -119,17 +128,25 @@ local function trim(s)
 end
 
 -- Initialize or retrieve the cached song index
+-- Drop the cached index (e.g. after the song library was reloaded with an unchanged count).
+function SongSearchEngine.Invalidate()
+	cachedSongCount = -1
+end
+
 function SongSearchEngine.GetIndex()
-	local allSongs = SONGMAN:GetAllSongs()
 	local style = GAMESTATE:GetCurrentStyle()
 	local stepsType = style and style:GetStepsType() or nil
+	local numSongs = SONGMAN:GetNumSongs()
 
-	-- If cached and song count & style match, return existing index
-	if allSongsCache and #allSongsCache == #allSongs and currentStyleCached == stepsType and #indexData > 0 then
+	-- Cached and the library size & style are unchanged: nothing to do. (The previous version
+	-- called SONGMAN:GetAllSongs() - a 9.5k-element table - on every keystroke just to compare #.)
+	if cachedSongCount == numSongs and currentStyleCached == stepsType and #indexData > 0 then
 		return indexData
 	end
 
-	allSongsCache = allSongs
+	local buildStart = GetTimeSinceStart()
+	local allSongs = SONGMAN:GetAllSongs()
+	cachedSongCount = numSongs
 	currentStyleCached = stepsType
 	indexData = {}
 	songDirMap = {}
@@ -233,6 +250,8 @@ function SongSearchEngine.GetIndex()
 		end
 	end
 
+	Trace(string.format("SONG_INDEX_BUILD instance=%s songs=%d ms=%.1f",
+		tostring(SongSearchEngine), #indexData, (GetTimeSinceStart() - buildStart) * 1000))
 	return indexData
 end
 

@@ -6,6 +6,7 @@ local KeyboardLayout = LoadActor("KeyboardLayout.lua")
 
 -- State variables
 local isOpen = false
+SL.Global.OmnibarOpen = false
 local searchQuery = ""
 local candidates = {}
 local totalMatches = 0
@@ -23,23 +24,9 @@ local typedQueryBeforeHistory = ""
 -- Audio preview debounce
 local lastPreviewSong = nil
 
--- Category Navigation active tracking
-local isCatNavActive = false
-
+-- Keyboard Mode (Category Navigation) activity is published on SL.Global.CategoryNavActive.
 local function IsCategoryNavActive()
-	if isCatNavActive then return true end
-	if SL and SL.Global and SL.Global.CategoryNavActive == true then return true end
-	local topScreen = SCREENMAN:GetTopScreen()
-	if topScreen and topScreen.GetChild then
-		local overlay = topScreen:GetChild("Overlay")
-		if overlay and overlay.GetChild then
-			local catMaster = overlay:GetChild("CategoryNavigationMaster")
-			if catMaster and catMaster.GetVisible and catMaster:GetVisible() then
-				return true
-			end
-		end
-	end
-	return false
+	return SL and SL.Global and SL.Global.CategoryNavActive == true
 end
 
 -- References to UI Actors
@@ -285,6 +272,7 @@ local function OpenOmnibar(initialChar)
 	if not ThemePrefs.Get("KeyboardFeatures") then return end
 	if isOpen then return end
 	isOpen = true
+	SL.Global.OmnibarOpen = true
 	KeyboardLayout.ReloadWindowsLayout()
 	historyIndex = 0
 	typedQueryBeforeHistory = ""
@@ -307,6 +295,7 @@ end
 local function CloseOmnibar()
 	if not isOpen then return end
 	isOpen = false
+	SL.Global.OmnibarOpen = false
 
 	-- Restore input back to engine
 	for pn in ivalues(PlayerNumber) do
@@ -333,34 +322,40 @@ local function SelectSongAndClose(directPlay)
 	end
 
 	local song = selected.song
+	local topScreen = SCREENMAN:GetTopScreen()
+	local wheel = topScreen and topScreen.GetMusicWheel and topScreen:GetMusicWheel()
+	local selectedViaWheel = false
+
 	GAMESTATE:SetPreferredSong(song)
 	GAMESTATE:SetCurrentSong(song)
 	SongSearchEngine.AddRecentSong(song)
 	if #searchQuery > 0 then
 		SongSearchEngine.AddSearchHistory(searchQuery)
 	end
+
+	-- Move the native wheel FIRST so that whoever reacts to HideOmnibar (Keyboard Mode) sees the
+	-- engine already on the searched song.
+	if wheel and wheel.SelectSong then
+		local curSort = GAMESTATE:GetSortOrder()
+		if curSort == "SortOrder_Preferred" or curSort == "SortOrder_Popularity" or curSort == "SortOrder_Recent"
+			or curSort == "SortOrder_Meter" then
+			wheel:ChangeSort("SortOrder_Group")
+		end
+		selectedViaWheel = wheel:SelectSong(song)
+		if selectedViaWheel then
+			-- AfterMusicChange(): banner, steps, density graph and preview follow the wheel.
+			topScreen:PostScreenMessage("SM_SongChanged", 0)
+		end
+	end
+
 	CloseOmnibar()
 
-	local topScreen = SCREENMAN:GetTopScreen()
 	if topScreen then
-		local curSort = GAMESTATE:GetSortOrder()
-		if curSort == "SortOrder_Preferred" or curSort == "SortOrder_Popularity" or curSort == "SortOrder_Recent" then
-			if topScreen.GetMusicWheel and topScreen:GetMusicWheel() then
-				topScreen:GetMusicWheel():ChangeSort("SortOrder_Group")
-			end
-		end
-
-		local wheel = topScreen.GetMusicWheel and topScreen:GetMusicWheel()
-		local selectedViaWheel = false
-		if wheel and wheel.SelectSong then
-			if wheel.SetOpenSection and song.GetGroupName then
-				wheel:SetOpenSection(song:GetGroupName())
-			end
-			selectedViaWheel = wheel:SelectSong(song)
-		end
-
 		if directPlay then
-			topScreen:StartTransitioningScreen("SM_GoToNextScreen")
+			-- same message ScreenSelectMusic::MenuStart uses. Off commands (stock SortMenu) hand
+			-- input back to the engine, so re-assert the redirect once they have run.
+			topScreen:StartTransitioningScreen("SM_BeginFadingOut")
+			for pn in ivalues(PlayerNumber) do SCREENMAN:set_input_redirected(pn, true) end
 		elseif not selectedViaWheel then
 			topScreen:SetNextScreenName("ScreenReloadSSM")
 			topScreen:StartTransitioningScreen("SM_GoToNextScreen")
@@ -424,17 +419,12 @@ local function SetDifficultyDirect(diffKey)
 end
 
 local function KeyboardInputHandler(event)
-	Trace(string.format("RAW_INPUT: type=%s button=%s devButton=%s", 
-		tostring(event and event.type), 
-		tostring(event and event.button), 
-		tostring(event and event.DeviceInput and event.DeviceInput.button)))
 	if not event or not event.DeviceInput then return false end
 	if not ThemePrefs.Get("KeyboardFeatures") then return false end
 
 	local btn = event.DeviceInput.button
 	local eventType = event.type
 
-	Trace(string.format("KEY_INPUT: type=%s btn=%s isOpen=%s", tostring(eventType), tostring(btn), tostring(isOpen)))
 
 	-- Track Modifier Keys
 	if btn == "DeviceButton_left shift" or btn == "DeviceButton_right shift" then
@@ -709,124 +699,22 @@ local boxHeight = 390
 local af = Def.ActorFrame {
 	Name = "KeyboardOmnibarRoot",
 	InitCommand = function(self)
-		local p1 = GAMESTATE:IsHumanPlayer(PLAYER_1)
-		local p2 = GAMESTATE:IsHumanPlayer(PLAYER_2)
-		local sides = GAMESTATE:GetNumSidesJoined()
-		local style = GAMESTATE:GetCurrentStyle()
-		Trace(string.format("DEBUG_STATE: sides=%s p1=%s p2=%s style=%s", tostring(sides), tostring(p1), tostring(p2), tostring(style and style:GetName())))
 		mainContainer = self:GetChild("OmnibarModal")
 		if mainContainer then
 			mainContainer:visible(false)
 		end
-		isCatNavActive = (ThemePrefs.Get("CategoryNavigation") == true)
 	end,
 	OnCommand = function(self)
-		isCatNavActive = (ThemePrefs.Get("CategoryNavigation") == true) or IsCategoryNavActive()
 		local top = SCREENMAN:GetTopScreen()
-		Trace("OMNIBAR: OnCommand top=" .. tostring(top and top:GetName()))
 		if top and top.AddInputCallback then
 			top:AddInputCallback(KeyboardInputHandler)
 		end
-
-		if FILEMAN:DoesFileExist("Save/run_test.flag") then
-			Trace("OMNIBAR_TEST: Flag detected, starting test sequence")
-			self:sleep(1.0):queuecommand("TestStepReady")
-		end
-	end,
-	TestStepReadyCommand = function(self)
-		Trace("OMNIBAR_TEST_STEP: ready")
-		self:sleep(1.5):queuecommand("TestStepOpen")
-	end,
-	TestStepOpenCommand = function(self)
-		OpenOmnibar("")
-		Trace("OMNIBAR_TEST_STEP: open")
-		self:sleep(1.2):queuecommand("TestStepColemak")
-	end,
-	TestStepColemakCommand = function(self)
-		-- Verify active layout mappings
-		local winName = KeyboardLayout.GetLayoutName()
-
-		Trace(string.format("VERIFY_WINDOWS_AUTO: name=%s winO=%s winOShift=%s winP=%s",
-			tostring(winName), tostring(winO), tostring(winOShift), tostring(winP)))
-
-		Trace(string.format("VERIFY_KEYS: colemakO=%s colemakOShift=%s colemakSemi=%s colemakColon=%s qwO=%s qwColon=%s qwColonShift=%s",
-			tostring(colemakO), tostring(colemakOShift), tostring(colemakSemi), tostring(colemakColon),
-			tostring(qwertyO), tostring(qwertyColon), tostring(qwertyColonShift)))
-
-		-- Simulate typing physical keys on Colemak: B, A, G (which translates to 'b', 'a', 'd'!)
-		local c1 = KeyboardLayout.TranslateButton("DeviceButton_b", false)
-		local c2 = KeyboardLayout.TranslateButton("DeviceButton_a", false)
-		local c3 = KeyboardLayout.TranslateButton("DeviceButton_g", false)
-		local typed = c1 .. c2 .. c3
-		ExecuteSearch(typed)
-		Trace("OMNIBAR_TEST_STEP: colemak_typed")
-		self:sleep(1.2):queuecommand("TestStepSearchBad")
-	end,
-	TestStepSearchBadCommand = function(self)
-		ExecuteSearch("bad")
-		Trace("OMNIBAR_TEST_STEP: search_bad")
-		self:sleep(1.2):queuecommand("TestStepSearchArtist")
-	end,
-	TestStepSearchArtistCommand = function(self)
-		ExecuteSearch("artist:thorogood")
-		Trace("OMNIBAR_TEST_STEP: search_artist")
-		self:sleep(1.2):queuecommand("TestStepSearchAuthor")
-	end,
-	TestStepSearchAuthorCommand = function(self)
-		ExecuteSearch("author:hellkite")
-		Trace("OMNIBAR_TEST_STEP: search_author")
-		self:sleep(1.2):queuecommand("TestStepSearchAlbum")
-	end,
-	TestStepSearchAlbumCommand = function(self)
-		ExecuteSearch("album:80s")
-		Trace("OMNIBAR_TEST_STEP: search_album")
-		self:sleep(1.2):queuecommand("TestStepSearchDiff")
-	end,
-	TestStepSearchDiffCommand = function(self)
-		ExecuteSearch("d:10-12")
-		Trace("OMNIBAR_TEST_STEP: search_diff")
-		self:sleep(1.2):queuecommand("TestStepSearchZero")
-	end,
-	TestStepSearchZeroCommand = function(self)
-		ExecuteSearch("nonexistingsong123")
-		Trace("OMNIBAR_TEST_STEP: search_zero")
-		self:sleep(1.2):queuecommand("TestStepSelectSong")
-	end,
-	TestStepSelectSongCommand = function(self)
-		ExecuteSearch("bad")
-		SelectSongAndClose(false)
-		Trace("OMNIBAR_TEST_STEP: selected")
-		self:sleep(1.2):queuecommand("TestStepReopenRecents")
-	end,
-	TestStepReopenRecentsCommand = function(self)
-		OpenOmnibar("")
-		Trace("OMNIBAR_TEST_STEP: reopen_recents")
-		self:sleep(1.2):queuecommand("TestStepHistoryRecall")
-	end,
-	TestStepHistoryRecallCommand = function(self)
-		StepHistory(1)
-		Trace("OMNIBAR_TEST_STEP: history_recall")
-		self:sleep(1.2):queuecommand("TestStepFinish")
-	end,
-	TestStepFinishCommand = function(self)
-		CloseOmnibar()
-		if FILEMAN:DoesFileExist("Save/WindowsKeyboardLayout.lua") then
-			KeyboardLayout.SetLayout("windows_auto")
-		else
-			KeyboardLayout.SetLayout("qwerty")
-		end
-		Trace("OMNIBAR_TEST_STEP: finished")
 	end,
 	OffCommand = function(self)
 		CloseOmnibar()
 		local top = SCREENMAN:GetTopScreen()
 		if top and top.RemoveInputCallback then
 			top:RemoveInputCallback(KeyboardInputHandler)
-		end
-	end,
-	CategoryNavigationModeChangedMessageCommand = function(self, params)
-		if params and params.active ~= nil then
-			isCatNavActive = params.active
 		end
 	end,
 	OpenOmnibarWithQueryMessageCommand = function(self, params)
@@ -1243,5 +1131,16 @@ local detailsFrame = Def.ActorFrame {
 
 modal[#modal + 1] = detailsFrame
 af[#af + 1] = modal
+
+-- Driver API (used by tests/keyboard_mode; harmless otherwise)
+SL.Global.KbdModeAPI = SL.Global.KbdModeAPI or {}
+SL.Global.KbdModeAPI.omnibar = {
+	Open = function(q) OpenOmnibar(q or "") end,
+	Close = function() CloseOmnibar() end,
+	IsOpen = function() return isOpen end,
+	Query = function(q) ExecuteSearch(q) end,
+	SelectCurrent = function(directPlay) SelectSongAndClose(directPlay) end,
+	Handle = function(e) return KeyboardInputHandler(e) end,
+}
 
 return af

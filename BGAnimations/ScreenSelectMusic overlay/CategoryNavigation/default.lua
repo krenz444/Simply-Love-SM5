@@ -1,11 +1,22 @@
 -- CategoryNavigation/default.lua
--- Master controller and input router for Category Navigation in Simply Love.
--- Unifies CategoryEngine, CategoryRibbon, and CategorySongWheel.
--- Provides seamless instant switching between Normal Scroll Wheel and Keyboard Mode at any time.
+-- Master controller and input router for Category Navigation ("Keyboard Mode") in Simply Love.
+-- Unifies CategoryEngine, CategoryRibbon, and CategorySongWheel and provides instant switching
+-- between the normal scroll wheel and Keyboard Mode at any time.
+--
+-- Engine facts this file relies on (verified against the ITGmania C++ source):
+--  * ScreenManager::Input() calls Screen::Input() FIRST (unless the player is redirected) and
+--    then PassInputToLua(); the Lua callback's return value is IGNORED for the top screen.
+--    The only thing that stops the engine from acting on a key is SCREENMAN:set_input_redirected.
+--  * Lua input callbacks are stored in a std::map keyed by closure address, so their relative
+--    order is arbitrary. Handlers must therefore own DISJOINT keys/states (see the Omnibar guard).
+--  * GAMESTATE current song / the banner / steps / density graph are driven by the wheel's
+--    SM_SongChanged -> ScreenSelectMusic::AfterMusicChange(). SelectSong() alone does not post it.
+--  * The per-screen redirect flag is discarded with the screen, so it is NOT cleared on Off.
 
 local CategoryEngine = LoadActor("CategoryEngine.lua")
 local CategoryRibbon = LoadActor("CategoryRibbon.lua")
 local CategorySongWheel = LoadActor("CategorySongWheel.lua")
+local SongSearchEngine = CategoryEngine.GetSearchEngine()
 
 -- References to UI Actors
 local rootActor = nil
@@ -19,9 +30,16 @@ local currentSongs = {}
 local selectedSongIdx = 1
 local topVisibleIdx = 1
 local maxRows = 14
+local isStarting = false           -- Start was accepted; the screen is leaving
 
 local isShiftHeld = false
 local isCtrlHeld = false
+
+-- The cheap part of a selection change (GAMESTATE song + broadcast) happens immediately; the
+-- expensive part (wheel rebuild + engine SM_SongChanged: banner, steps, graph, preview music)
+-- is coalesced so holding Up/Down does not rebuild the wheel on every repeat.
+local SETTLE_DELAY = 0.12
+local pendingWheelSong = nil
 
 -- Tab Repeat Pacing & Debounce
 local lastTabTime = 0
@@ -39,11 +57,76 @@ local RefreshCategorySongs = nil
 local EnterKeyboardMode = nil
 local ExitKeyboardMode = nil
 
+-- -------------------------------------------------------------
+-- Small helpers
+-- -------------------------------------------------------------
+local function SetRedirect(on)
+	for pn in ivalues(PlayerNumber) do
+		SCREENMAN:set_input_redirected(pn, on)
+	end
+end
+
+local function GetTopAndWheel()
+	local top = SCREENMAN:GetTopScreen()
+	if top and top.GetMusicWheel then
+		return top, top:GetMusicWheel()
+	end
+	return top, nil
+end
+
+local function SetNavActive(active)
+	isNavActive = active
+	if SL and SL.Global then SL.Global.CategoryNavActive = active end
+end
+
+local function ClampTop(sel)
+	return math.max(1, math.min(#currentSongs - maxRows + 1, sel - 2))
+end
+
+-- SelectSong() cannot move between sections under these sorts when a section was last opened
+-- by hand (MusicWheel::SelectSong re-opens sLastOpenSection). Group sort is always safe.
+local function EnsureWheelSortable(wheel)
+	local so = GAMESTATE:GetSortOrder()
+	if so == "SortOrder_Preferred" or so == "SortOrder_Meter" then
+		wheel:ChangeSort("SortOrder_Group")
+	end
+end
+
+local function RecordRecent(song)
+	if song and SongSearchEngine and SongSearchEngine.AddRecentSong then
+		SongSearchEngine.AddRecentSong(song)
+	end
+end
+
+-- Bring the (hidden) native wheel and the engine's selection-driven UI in line with `pendingWheelSong`.
+local function FlushWheelSync()
+	local song = pendingWheelSong
+	if not song then return end
+	pendingWheelSong = nil
+	local top, wheel = GetTopAndWheel()
+	if not wheel then return end
+	EnsureWheelSortable(wheel)
+	if wheel:SelectSong(song) then
+		-- ScreenSelectMusic::AfterMusicChange(): sets m_pCurSong from the wheel and refreshes
+		-- banner / steps / density graph / sample music exactly as a normal wheel move does.
+		top:PostScreenMessage("SM_SongChanged", 0)
+	end
+end
+
+local function ScheduleSettle()
+	if rootActor then
+		rootActor:stoptweening():sleep(SETTLE_DELAY):queuecommand("SettleSelection")
+	end
+end
+
 -- Broadcast UI State to Ribbon and SongWheel
 BroadcastUIState = function()
 	local cat = categories[activeCategoryIdx]
 	if not cat then return end
 	local subChips = CategoryEngine.GetSubChips(cat.id)
+	local chip = subChips[activeSubChipIdx] or subChips[1]
+	local chipId = chip and chip.id or "all"
+	local meterMin, meterMax = CategoryEngine.GetMeterRange(cat.id, chipId)
 
 	MESSAGEMAN:Broadcast("UpdateCategoryUI", {
 		categoryIdx = activeCategoryIdx,
@@ -54,52 +137,58 @@ BroadcastUIState = function()
 		totalSongs = #currentSongs,
 		selectedIdx = selectedSongIdx,
 		topIdx = topVisibleIdx,
+		meterMin = meterMin,
+		meterMax = meterMax,
+		emptyHint = CategoryEngine.GetEmptyHint(cat.id, chipId),
 	})
 end
 
--- Sync current song with StepMania engine and native MusicWheel
+-- Make `song` the engine's current song immediately; defer the wheel/engine refresh.
 SyncCurrentSong = function(song)
 	if not song then return end
 	GAMESTATE:SetPreferredSong(song)
 	GAMESTATE:SetCurrentSong(song)
-
-	local top = SCREENMAN:GetTopScreen()
-	if top and top.GetMusicWheel then
-		local wheel = top:GetMusicWheel()
-		if wheel and wheel.SelectSong then
-			if wheel.SetOpenSection and song.GetGroupName then
-				wheel:SetOpenSection(song:GetGroupName())
-			end
-			wheel:SelectSong(song)
-		end
-	end
-
 	MESSAGEMAN:Broadcast("CurrentSongChanged")
+	pendingWheelSong = song
+	ScheduleSettle()
 end
 
--- Refresh Songs for active Category & SubChip
-RefreshCategorySongs = function()
+-- Rebuild the list for the active Category & SubChip.
+-- anchorSong: keep the cursor on this song when it is in the new list (and sync the engine to
+--             THAT song once, instead of to the first row followed by a cursor-only move).
+-- fallbackIdx: when the anchor is absent, keep roughly the same row (e.g. after un-favoriting).
+RefreshCategorySongs = function(anchorSong, fallbackIdx)
 	local cat = categories[activeCategoryIdx]
 	if not cat then return end
 
 	local subChips = CategoryEngine.GetSubChips(cat.id)
-	local activeChip = subChips[activeSubChipIdx] or subChips[1]
-	local chipId = activeChip and activeChip.id or "all"
+	if activeSubChipIdx > #subChips then activeSubChipIdx = 1 end
+	local chip = subChips[activeSubChipIdx] or subChips[1]
+	currentSongs = CategoryEngine.GetSongs(cat.id, chip and chip.id or "all")
 
-	currentSongs = CategoryEngine.GetSongs(cat.id, chipId)
-	selectedSongIdx = 1
-	topVisibleIdx = 1
+	local idx = nil
+	if anchorSong then
+		for i, entry in ipairs(currentSongs) do
+			if entry.song == anchorSong then idx = i break end
+		end
+	end
+	if not idx and fallbackIdx and #currentSongs > 0 then
+		idx = math.min(math.max(fallbackIdx, 1), #currentSongs)
+	end
+	selectedSongIdx = idx or 1
+	topVisibleIdx = ClampTop(selectedSongIdx)
 
-	if #currentSongs > 0 and currentSongs[1].song then
-		SyncCurrentSong(currentSongs[1].song)
+	local entry = currentSongs[selectedSongIdx]
+	if entry and entry.song then
+		SyncCurrentSong(entry.song)
 	end
 
 	BroadcastUIState()
 end
 
--- Cycle Category (1 to 6)
+-- Cycle Category
 local function CycleCategory(delta)
-	local numSelectable = 6 -- PACKS, FAVORITES, METERS, BPM, RANKED, A-Z
+	local numSelectable = #categories
 	activeCategoryIdx = activeCategoryIdx + delta
 	if activeCategoryIdx < 1 then activeCategoryIdx = numSelectable end
 	if activeCategoryIdx > numSelectable then activeCategoryIdx = 1 end
@@ -144,12 +233,6 @@ local function SelectSongAtIndex(idx, playSound)
 		SOUND:PlayOnce(THEME:GetPathS("MusicWheel", "change"))
 	end
 
-	if rootActor then
-		rootActor:stoptweening()
-		rootActor:sleep(0.12)
-		rootActor:queuecommand("TriggerAudioPreview")
-	end
-
 	BroadcastUIState()
 end
 
@@ -173,14 +256,12 @@ local function SetDifficultyDirect(diffKey)
 	local style = GAMESTATE:GetCurrentStyle()
 	if not song or not style then return false end
 
-	local st = style:GetStepsType()
-	local steps = song:GetOneSteps(st, targetDiff)
+	local steps = song:GetOneSteps(style:GetStepsType(), targetDiff)
 	if steps then
 		for pn in ivalues(GAMESTATE:GetHumanPlayers()) do
 			GAMESTATE:SetCurrentSteps(pn, steps)
 			GAMESTATE:SetPreferredDifficulty(pn, targetDiff)
-			local pShort = ToEnumShortString(pn)
-			MESSAGEMAN:Broadcast("CurrentSteps" .. pShort .. "Changed")
+			MESSAGEMAN:Broadcast("CurrentSteps" .. ToEnumShortString(pn) .. "Changed")
 		end
 		MESSAGEMAN:Broadcast("CurrentStepsChanged")
 		SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "difficulty easier"))
@@ -193,92 +274,93 @@ end
 -- Scroll song by delta
 local function ScrollSong(delta)
 	if #currentSongs == 0 then return end
-	local newIdx = selectedSongIdx + delta
-	if newIdx < 1 then newIdx = 1 end
-	if newIdx > #currentSongs then newIdx = #currentSongs end
+	local newIdx = math.max(1, math.min(#currentSongs, selectedSongIdx + delta))
 	if newIdx ~= selectedSongIdx then
 		SelectSongAtIndex(newIdx, true)
 	end
 end
 
--- Enter Keyboard Mode (Hide native wheel, show category navigation)
-EnterKeyboardMode = function()
-	isNavActive = true
+-- Enter Keyboard Mode (hide native wheel, show category navigation)
+EnterKeyboardMode = function(silent)
+	if isNavActive then return end
+	SetNavActive(true)
 	lastTabTime = GetTimeSinceStart()
 	tabRepeatCount = 0
-	if SL and SL.Global then SL.Global.CategoryNavActive = true end
-	for pn in ivalues(PlayerNumber) do
-		SCREENMAN:set_input_redirected(pn, true)
+	isStarting = false
+	SetRedirect(true)
+
+	local _, wheel = GetTopAndWheel()
+	if wheel then
+		wheel:visible(false)
+		wheel:diffusealpha(0)
 	end
-	Trace("CATEGORY_NAV: EnterKeyboardMode - input redirected for all players")
+	if rootActor then rootActor:visible(true) end
 
-	local top = SCREENMAN:GetTopScreen()
-	if top and top.GetMusicWheel then
-		local wheel = top:GetMusicWheel()
-		if wheel then
-			wheel:visible(false)
-			wheel:diffusealpha(0)
-		end
-	end
+	CategoryEngine.InvalidatePlayCache()
+	-- Anchor on the song the player is already on: sync the engine to THAT song once.
+	RefreshCategorySongs(GAMESTATE:GetCurrentSong())
 
-	if rootActor then
-		rootActor:visible(true)
-	end
-
-	local curSong = GAMESTATE:GetCurrentSong()
-	RefreshCategorySongs()
-
-	-- If a song was already selected on the native wheel, attempt to position on it
-	if curSong and #currentSongs > 0 then
-		for idx, entry in ipairs(currentSongs) do
-			if entry.song == curSong then
-				selectedSongIdx = idx
-				if selectedSongIdx < topVisibleIdx or selectedSongIdx >= topVisibleIdx + maxRows then
-					topVisibleIdx = math.max(1, math.min(#currentSongs - maxRows + 1, selectedSongIdx - 2))
-				end
-				break
-			end
-		end
-	end
-
-	SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
-	BroadcastUIState()
-	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = isNavActive })
+	if not silent then SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down")) end
+	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = true })
 end
 
--- Exit Keyboard Mode (Hide category navigation, restore normal scroll wheel)
+-- Exit Keyboard Mode (hide category navigation, restore normal scroll wheel)
 ExitKeyboardMode = function()
-	isNavActive = false
+	if not isNavActive then return end
+	SetNavActive(false)
 	lastTabTime = 0
 	tabRepeatCount = 0
-	if SL and SL.Global then SL.Global.CategoryNavActive = false end
-	for pn in ivalues(PlayerNumber) do
-		SCREENMAN:set_input_redirected(pn, false)
-	end
-	Trace("CATEGORY_NAV: ExitKeyboardMode - input un-redirected, normal wheel restored")
+	SetRedirect(false)
 
-	if rootActor then
-		rootActor:visible(false)
-	end
+	if rootActor then rootActor:visible(false) end
 
-	local top = SCREENMAN:GetTopScreen()
-	if top and top.GetMusicWheel then
-		local wheel = top:GetMusicWheel()
-		if wheel then
-			wheel:visible(true)
-			wheel:diffusealpha(1)
-			local curSong = GAMESTATE:GetCurrentSong()
-			if curSong and wheel.SelectSong then
-				if wheel.SetOpenSection and curSong.GetGroupName then
-					wheel:SetOpenSection(curSong:GetGroupName())
-				end
-				wheel:SelectSong(curSong)
-			end
-		end
+	local _, wheel = GetTopAndWheel()
+	if wheel then
+		wheel:visible(true)
+		wheel:diffusealpha(1)
 	end
+	-- Put the native wheel (and banner/steps/graph) on whatever is current right now.
+	local cur = GAMESTATE:GetCurrentSong()
+	if cur then pendingWheelSong = cur end
+	FlushWheelSync()
 
 	SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
-	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = isNavActive })
+	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
+end
+
+-- Start the highlighted song through the engine's own fade-out path.
+local function StartSelectedSong()
+	if isStarting then return end
+	local entry = currentSongs[selectedSongIdx]
+	local top = SCREENMAN:GetTopScreen()
+	if not (entry and entry.song and top and top.StartTransitioningScreen) then
+		SOUND:PlayOnce(THEME:GetPathS("Common", "invalid"))
+		return
+	end
+	isStarting = true
+
+	-- The highlighted row IS the song that will be played.
+	if GAMESTATE:GetCurrentSong() ~= entry.song then SyncCurrentSong(entry.song) end
+	FlushWheelSync()
+	RecordRecent(entry.song)
+
+	SOUND:PlayOnce(THEME:GetPathS("Common", "start"))
+	-- Same message ScreenSelectMusic::MenuStart uses.
+	top:StartTransitioningScreen("SM_BeginFadingOut")
+	-- Starting the transition plays every actor's OffCommand synchronously, and the stock
+	-- SortMenu's OffCommand hands input back to the engine for all players. Re-assert the
+	-- redirect so Left/Right/Back cannot change the wheel while the screen fades out.
+	SetRedirect(true)
+end
+
+-- Wheel mode: remember songs the player actually starts so "Recent Songs" means played songs.
+local function NoteWheelStart(event)
+	local pn = event.PlayerNumber
+	if not (pn and GAMESTATE:IsHumanPlayer(pn)) then return end
+	local _, wheel = GetTopAndWheel()
+	if wheel and wheel.GetSelectedType and wheel:GetSelectedType() == "WheelItemDataType_Song" then
+		RecordRecent(GAMESTATE:GetCurrentSong())
+	end
 end
 
 -- Master Actor Frame
@@ -286,10 +368,8 @@ local af = Def.ActorFrame {
 	Name = "CategoryNavigationMaster",
 	InitCommand = function(self)
 		rootActor = self
-		local startInCatNav = (ThemePrefs.Get("CategoryNavigation") == true)
-		self:visible(startInCatNav)
-		isNavActive = startInCatNav
-		if SL and SL.Global then SL.Global.CategoryNavActive = startInCatNav end
+		self:visible(false)
+		SetNavActive(false)
 	end,
 	OnCommand = function(self)
 		local top = SCREENMAN:GetTopScreen()
@@ -297,311 +377,74 @@ local af = Def.ActorFrame {
 			top:AddInputCallback(CategoryInputHandler)
 		end
 
-		local startInCatNav = (ThemePrefs.Get("CategoryNavigation") == true)
-		self:visible(startInCatNav)
-		isNavActive = startInCatNav
-		if SL and SL.Global then SL.Global.CategoryNavActive = startInCatNav end
-		MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = isNavActive })
-
-		if startInCatNav then
-			for pn in ivalues(PlayerNumber) do
-				SCREENMAN:set_input_redirected(pn, true)
-			end
-			if top and top.GetMusicWheel then
-				local wheel = top:GetMusicWheel()
-				if wheel then
-					wheel:visible(false)
-					wheel:diffusealpha(0)
-				end
-			end
-			RefreshCategorySongs()
-		else
-			for pn in ivalues(PlayerNumber) do
-				SCREENMAN:set_input_redirected(pn, false)
-			end
-			-- Ensure normal wheel is visible and active
-			if top and top.GetMusicWheel then
-				local wheel = top:GetMusicWheel()
-				if wheel then
-					wheel:visible(true)
-					wheel:diffusealpha(1)
-				end
-			end
-		end
-
-		if FILEMAN:DoesFileExist("Save/run_category_test.flag") then
-			Trace("CATEGORY_TEST: Flag detected, starting test sequence")
-			self:sleep(1.0):queuecommand("TestCatReady")
-		end
-
-		if FILEMAN:DoesFileExist("Save/run_switch_test.flag") then
-			Trace("SWITCH_TEST: Flag detected, starting mode switch test sequence")
-			self:sleep(1.0):queuecommand("TestSwitchInitial")
-		end
-
-		if FILEMAN:DoesFileExist("Save/run_escape_test.flag") then
-			Trace("ESCAPE_TEST: Flag detected, starting escape test sequence")
-			self:sleep(1.0):queuecommand("TestEscapeEnterKey")
-		end
-
-		if FILEMAN:DoesFileExist("Save/run_tab_test.flag") then
-			Trace("TAB_TEST: Flag detected, starting tab repeat test sequence")
-			self:sleep(1.0):queuecommand("TestTabRepeat")
-		end
-
-		if FILEMAN:DoesFileExist("Save/run_sequence_test.flag") then
-			Trace("SEQUENCE_TEST: Flag detected, starting sequence toggle test")
-			self:sleep(1.0):queuecommand("TestSequenceStart")
+		MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
+		if ThemePrefs.Get("CategoryNavigation") == true then
+			EnterKeyboardMode(true)
 		end
 	end,
-	TestSequenceStartCommand = function(self)
-		Trace("SEQUENCE_TEST_STEP: step1_exit_keyboard_mode")
-		ExitKeyboardMode()
-		local redir1 = SCREENMAN:get_input_redirected(PLAYER_1)
-		Trace(string.format("SEQUENCE_TEST_STATE: step1 isNavActive=%s redir=%s", tostring(isNavActive), tostring(redir1)))
-		self:sleep(0.5):queuecommand("TestSequenceStep2")
-	end,
-	TestSequenceStep2Command = function(self)
-		Trace("SEQUENCE_TEST_STEP: step2_enter_keyboard_mode_via_tab")
-		CategoryInputHandler({
-			type = "InputEventType_FirstPress",
-			DeviceInput = { button = "DeviceButton_tab" },
-			GameButton = "Select",
-		})
-		local redir2 = SCREENMAN:get_input_redirected(PLAYER_1)
-		Trace(string.format("SEQUENCE_TEST_STATE: step2 isNavActive=%s redir=%s", tostring(isNavActive), tostring(redir2)))
-		self:sleep(0.5):queuecommand("TestSequenceStep3")
-	end,
-	TestSequenceStep3Command = function(self)
-		Trace("SEQUENCE_TEST_STEP: step3_exit_keyboard_mode_via_esc")
-		CategoryInputHandler({
-			type = "InputEventType_FirstPress",
-			DeviceInput = { button = "DeviceButton_escape" },
-			GameButton = "Back",
-		})
-		local redir3 = SCREENMAN:get_input_redirected(PLAYER_1)
-		Trace(string.format("SEQUENCE_TEST_STATE: step3 isNavActive=%s redir=%s", tostring(isNavActive), tostring(redir3)))
-		self:sleep(0.5):queuecommand("TestSequenceStep4")
-	end,
-	TestSequenceStep4Command = function(self)
-		Trace("SEQUENCE_TEST_STEP: step4_verify_inputs_on_wheel")
-		local handledRight = CategoryInputHandler({
-			type = "InputEventType_FirstPress",
-			DeviceInput = { button = "DeviceButton_right" },
-			GameButton = "MenuRight",
-		})
-		local handledLeft = CategoryInputHandler({
-			type = "InputEventType_FirstPress",
-			DeviceInput = { button = "DeviceButton_left" },
-			GameButton = "MenuLeft",
-		})
-		local handledEnter = CategoryInputHandler({
-			type = "InputEventType_FirstPress",
-			DeviceInput = { button = "DeviceButton_enter" },
-			GameButton = "Start",
-		})
-		local handledEsc = CategoryInputHandler({
-			type = "InputEventType_FirstPress",
-			DeviceInput = { button = "DeviceButton_escape" },
-			GameButton = "Back",
-		})
-
-		Trace(string.format("SEQUENCE_TEST_VERIFY: handledRight=%s handledLeft=%s handledEnter=%s handledEsc=%s",
-			tostring(handledRight), tostring(handledLeft), tostring(handledEnter), tostring(handledEsc)))
-
-		local success = (handledRight == false) and (handledLeft == false) and (handledEnter == false) and (handledEsc == false)
-		Trace(string.format("SEQUENCE_TEST_FINISH: success=%s", tostring(success)))
-	end,
-	TestTabRepeatCommand = function(self)
-		Trace("TAB_TEST_STEP: start")
-		EnterKeyboardMode()
-		local startCat = activeCategoryIdx
-		Trace("TAB_TEST: initial cat = " .. tostring(startCat))
-
-		-- 1. FirstPress should advance category immediately
-		CategoryInputHandler({ type = "InputEventType_FirstPress", DeviceInput = { button = "DeviceButton_tab" } })
-		local catAfter1 = activeCategoryIdx
-		Trace("TAB_TEST: after FirstPress = " .. tostring(catAfter1))
-
-		-- 2. Immediate Repeat (simulating high-speed hardware repeat) should be IGNORED
-		CategoryInputHandler({ type = "InputEventType_Repeat", DeviceInput = { button = "DeviceButton_tab" } })
-		local catAfterImmediateRepeat = activeCategoryIdx
-		Trace("TAB_TEST: after immediate Repeat = " .. tostring(catAfterImmediateRepeat))
-
-		-- Queue next step after 0.5s to test delayed repeat
-		self:sleep(0.5):queuecommand("TestTabDelayedRepeat")
-	end,
-	TestTabDelayedRepeatCommand = function(self)
-		-- 3. Repeat after 0.5s (>= 0.40s) should advance category
-		CategoryInputHandler({ type = "InputEventType_Repeat", DeviceInput = { button = "DeviceButton_tab" } })
-		local catAfterDelayedRepeat = activeCategoryIdx
-		Trace("TAB_TEST: after 0.5s Repeat = " .. tostring(catAfterDelayedRepeat))
-
-		-- 4. Immediate repeat again should be ignored
-		CategoryInputHandler({ type = "InputEventType_Repeat", DeviceInput = { button = "DeviceButton_tab" } })
-		local catAfterSubsequentFastRepeat = activeCategoryIdx
-		Trace("TAB_TEST: after subsequent fast Repeat = " .. tostring(catAfterSubsequentFastRepeat))
-
-		-- Queue finish after 0.35s
-		self:sleep(0.35):queuecommand("TestTabRepeatInterval")
-	end,
-	TestTabRepeatIntervalCommand = function(self)
-		-- 5. Repeat after 0.35s (>= 0.28s) should advance category
-		CategoryInputHandler({ type = "InputEventType_Repeat", DeviceInput = { button = "DeviceButton_tab" } })
-		local catAfterIntervalRepeat = activeCategoryIdx
-		Trace("TAB_TEST: after interval Repeat = " .. tostring(catAfterIntervalRepeat))
-
-		-- 6. Release resets state
-		CategoryInputHandler({ type = "InputEventType_Release", DeviceInput = { button = "DeviceButton_tab" } })
-		Trace("TAB_TEST_STEP: finished")
-	end,
-	TestEscapeEnterKeyCommand = function(self)
-		EnterKeyboardMode()
-		Trace("ESCAPE_TEST_STEP: keyboard_ready")
-	end,
-	TestSwitchInitialCommand = function(self)
-		Trace("SWITCH_TEST_STEP: wheel_initial")
-		self:sleep(1.5):queuecommand("TestSwitchEnterKey")
-	end,
-	TestSwitchEnterKeyCommand = function(self)
-		EnterKeyboardMode()
-		Trace("SWITCH_TEST_STEP: keyboard_switched")
-		self:sleep(1.5):queuecommand("TestSwitchExitKey")
-	end,
-	TestSwitchExitKeyCommand = function(self)
-		CategoryInputHandler({
-			type = "InputEventType_FirstPress",
-			DeviceInput = { button = "DeviceButton_escape" }
-		})
-		Trace("SWITCH_TEST_STEP: wheel_returned")
-		self:sleep(1.5):queuecommand("TestSwitchDone")
-	end,
-	TestSwitchDoneCommand = function(self)
-		Trace("SWITCH_TEST_STEP: finished")
-	end,
-	TestCatReadyCommand = function(self)
-		Trace("CATEGORY_TEST_STEP: cat_ready")
-		self:sleep(1.2):queuecommand("TestCatMeters")
-	end,
-	TestCatMetersCommand = function(self)
-		CycleCategory(2)
-		Trace("CATEGORY_TEST_STEP: cat_meters")
-		self:sleep(1.2):queuecommand("TestCatChips")
-	end,
-	TestCatChipsCommand = function(self)
-		CycleSubChip(2)
-		Trace("CATEGORY_TEST_STEP: cat_chips")
-		self:sleep(1.2):queuecommand("TestCatScroll")
-	end,
-	TestCatScrollCommand = function(self)
-		ScrollSong(2)
-		Trace("CATEGORY_TEST_STEP: cat_scroll")
-		self:sleep(1.2):queuecommand("TestCatBPM")
-	end,
-	TestCatBPMCommand = function(self)
-		CycleCategory(1)
-		Trace("CATEGORY_TEST_STEP: cat_bpm")
-		self:sleep(1.2):queuecommand("TestCatDone")
-	end,
-	TestCatDoneCommand = function(self)
-		Trace("CATEGORY_TEST_STEP: finished")
+	SettleSelectionCommand = function(self)
+		if isNavActive then FlushWheelSync() end
 	end,
 	OffCommand = function(self)
-		for pn in ivalues(PlayerNumber) do
-			SCREENMAN:set_input_redirected(pn, false)
-		end
+		-- NOTE: input redirection is deliberately NOT cleared here: it is per-screen state that dies
+		-- with the screen (see StartSelectedSong for why it is re-asserted after the Off commands).
 		local top = SCREENMAN:GetTopScreen()
 		if top and top.RemoveInputCallback then
 			top:RemoveInputCallback(CategoryInputHandler)
 		end
-		isNavActive = false
-		if SL and SL.Global then SL.Global.CategoryNavActive = false end
+		SetNavActive(false)
 		MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
 	end,
 	ShowOmnibarMessageCommand = function(self)
 		self:visible(false)
 		wasNavActiveBeforeOmnibar = isNavActive
-		isNavActive = false
-		if SL and SL.Global then SL.Global.CategoryNavActive = false end
+		SetNavActive(false)
 		MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
 	end,
 	HideOmnibarMessageCommand = function(self)
 		if wasNavActiveBeforeOmnibar then
+			wasNavActiveBeforeOmnibar = false
 			self:visible(true)
-			isNavActive = true
-			if SL and SL.Global then SL.Global.CategoryNavActive = true end
-			for pn in ivalues(PlayerNumber) do
-				SCREENMAN:set_input_redirected(pn, true)
-			end
-			local curSong = GAMESTATE:GetCurrentSong()
-			if curSong then
-				local found = false
-				for idx, entry in ipairs(currentSongs) do
-					if entry.song == curSong then
-						selectedSongIdx = idx
-						if selectedSongIdx < topVisibleIdx or selectedSongIdx >= topVisibleIdx + maxRows then
-							topVisibleIdx = math.max(1, math.min(#currentSongs - maxRows + 1, selectedSongIdx - 2))
-						end
-						found = true
-						break
-					end
-				end
+			SetNavActive(true)
+			SetRedirect(true)
 
-				-- If the song is NOT in the current category/subchip, automatically switch to PACKS category
-				-- and locate the song's pack so the wheel displays the newly selected song seamlessly!
-				if not found and curSong.GetGroupName then
-					local packName = curSong:GetGroupName()
-					activeCategoryIdx = 1 -- Switch to PACKS category
-					local subChips = CategoryEngine.GetSubChips("packs")
-					activeSubChipIdx = 1
-					for cIdx, chip in ipairs(subChips) do
-						if chip.id == packName then
-							activeSubChipIdx = cIdx
-							break
-						end
-					end
-					RefreshCategorySongs()
-					for idx, entry in ipairs(currentSongs) do
-						if entry.song == curSong then
-							selectedSongIdx = idx
-							topVisibleIdx = math.max(1, math.min(#currentSongs - maxRows + 1, selectedSongIdx - 2))
-							break
-						end
-					end
+			-- If the searched song is not in the current category/chip, switch to its pack.
+			local cur = GAMESTATE:GetCurrentSong()
+			local found = false
+			if cur then
+				for _, entry in ipairs(currentSongs) do
+					if entry.song == cur then found = true break end
 				end
 			end
-			BroadcastUIState()
+			if cur and not found and cur.GetGroupName then
+				local packName = cur:GetGroupName()
+				activeCategoryIdx = 1
+				activeSubChipIdx = 1
+				for cIdx, chip in ipairs(CategoryEngine.GetSubChips("packs")) do
+					if chip.id == packName then activeSubChipIdx = cIdx break end
+				end
+			end
+			-- Anchored refresh: cursor AND engine land on the searched song (one sync).
+			RefreshCategorySongs(cur)
 			MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = true })
 		else
 			self:visible(false)
-			isNavActive = false
-			if SL and SL.Global then SL.Global.CategoryNavActive = false end
-			for pn in ivalues(PlayerNumber) do
-				SCREENMAN:set_input_redirected(pn, false)
-			end
+			SetNavActive(false)
+			SetRedirect(false)
 			MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
 		end
 	end,
 	CodeMessageCommand = function(self, params)
-		if params and (params.Name == "Favorite1" or params.Name == "Favorite2") then
+		if isNavActive and params and (params.Name == "Favorite1" or params.Name == "Favorite2") then
 			if categories[activeCategoryIdx] and categories[activeCategoryIdx].id == "favorites" then
-				RefreshCategorySongs()
+				RefreshCategorySongs(nil, selectedSongIdx)
 			else
 				BroadcastUIState()
 			end
 		end
 	end,
 	ToggleCategoryNavigationMessageCommand = function(self)
-		if isNavActive then
-			ExitKeyboardMode()
-		else
-			EnterKeyboardMode()
-		end
-	end,
-	TriggerAudioPreviewCommand = function(self)
-		if isNavActive then
-			play_sample_music()
-		end
+		if isNavActive then ExitKeyboardMode() else EnterKeyboardMode() end
 	end,
 }
 
@@ -609,14 +452,15 @@ af[#af + 1] = CategoryRibbon
 af[#af + 1] = CategorySongWheel
 
 -- Input Router for Category Navigation & Mode Switching
+-- Ownership (so the arbitrary callback order never matters):
+--   Omnibar open            -> Omnibar only (this handler returns false, apart from modifier tracking)
+--   Keyboard Mode           -> this handler only (the Omnibar handler returns false)
+--   Wheel mode, Omnibar shut-> Tab/F3 here; typing, Ctrl+K/F, "/" in the Omnibar handler
 CategoryInputHandler = function(event)
 	if not event or not event.DeviceInput then return false end
 
 	local btn = event.DeviceInput.button
 	local eventType = event.type
-
-	Trace(string.format("CAT_INPUT: type=%s btn=%s gameBtn=%s isNavActive=%s",
-		tostring(eventType), tostring(btn), tostring(event.GameButton), tostring(isNavActive)))
 
 	-- Modifier Tracking
 	if btn == "DeviceButton_left shift" or btn == "DeviceButton_right shift" then
@@ -640,54 +484,60 @@ CategoryInputHandler = function(event)
 	local isDown = (eventType == "InputEventType_FirstPress" or eventType == "InputEventType_Repeat")
 	if not isDown then return false end
 
+	-- The Omnibar owns the keyboard while it is open.
+	if SL and SL.Global and SL.Global.OmnibarOpen then return false end
+
 	-- =========================================================
-	-- CASE 1: In Normal Scroll Wheel Mode (isNavActive == false)
+	-- CASE 1: Normal Scroll Wheel Mode
 	-- =========================================================
 	if not isNavActive then
-		-- Check if player pressed Tab, F3, or Ctrl+K to switch into Keyboard Mode!
-		if btn == "DeviceButton_tab" or btn == "DeviceButton_f3" or (isCtrlHeld and (btn == "DeviceButton_k" or btn == "DeviceButton_K")) then
+		if btn == "DeviceButton_tab" or btn == "DeviceButton_f3" then
 			if eventType == "InputEventType_FirstPress" then
-				lastTabTime = GetTimeSinceStart()
-				tabRepeatCount = 0
 				EnterKeyboardMode()
-				return true
 			end
 			return true
 		end
 
-		-- All other inputs (arcade cabinet buttons MenuLeft, MenuRight, MenuUp, MenuDown, Start, Select,
-		-- and keyboard arrows / alphanumeric letters) pass through completely!
-		-- Standard DDR cabinet input works natively with 100% Simply Love wheel behavior!
+		if event.GameButton == "Start" and eventType == "InputEventType_FirstPress" then
+			NoteWheelStart(event)
+		end
+
+		-- Everything else (cabinet buttons, arrows, letters, Ctrl+K) passes through untouched.
 		return false
 	end
 
 	-- =========================================================
-	-- CASE 2: In Keyboard Mode (isNavActive == true)
+	-- CASE 2: Keyboard Mode
 	-- =========================================================
+	if isStarting then return true end
 
-	-- Escape, Back, F3, or Ctrl+K: Switch BACK to Normal Scroll Wheel at any time!
-	if btn == "DeviceButton_escape" or btn == "DeviceButton_f3" or (isCtrlHeld and (btn == "DeviceButton_k" or btn == "DeviceButton_K")) or event.GameButton == "Back" then
-		Trace("CATEGORY_NAV: Escape/Back pressed - exiting to wheel cleanly without prompt")
-		ExitKeyboardMode()
+	-- Escape / Back / F3: return to the Normal Scroll Wheel.
+	if btn == "DeviceButton_escape" or btn == "DeviceButton_f3" or event.GameButton == "Back" then
+		if eventType == "InputEventType_FirstPress" then ExitKeyboardMode() end
 		return true
 	end
 
-	-- Omnibar / Search hotkeys:
-	if btn == "DeviceButton_slash" or (isCtrlHeld and (btn == "DeviceButton_f" or btn == "DeviceButton_F")) then
-		MESSAGEMAN:Broadcast("OpenOmnibarWithQuery", { query = "" })
+	-- Search: "/", Ctrl+F or Ctrl+K open the Omnibar.
+	if btn == "DeviceButton_slash"
+		or (isCtrlHeld and (btn == "DeviceButton_f" or btn == "DeviceButton_F" or btn == "DeviceButton_k" or btn == "DeviceButton_K")) then
+		if eventType == "InputEventType_FirstPress" then
+			MESSAGEMAN:Broadcast("OpenOmnibarWithQuery", { query = "" })
+		end
 		return true
 	end
 
 	-- Ctrl+D or Ctrl+B: Toggle Favorite on current song
 	if isCtrlHeld and (btn == "DeviceButton_d" or btn == "DeviceButton_D" or btn == "DeviceButton_b" or btn == "DeviceButton_B") then
-		for pn in ivalues(GAMESTATE:GetHumanPlayers()) do
-			addOrRemoveFavorite(pn)
-			break
-		end
-		if categories[activeCategoryIdx] and categories[activeCategoryIdx].id == "favorites" then
-			RefreshCategorySongs()
-		else
-			BroadcastUIState()
+		if eventType == "InputEventType_FirstPress" then
+			for pn in ivalues(GAMESTATE:GetHumanPlayers()) do
+				addOrRemoveFavorite(pn)
+				break
+			end
+			if categories[activeCategoryIdx] and categories[activeCategoryIdx].id == "favorites" then
+				RefreshCategorySongs(nil, selectedSongIdx)   -- stay on the same row
+			else
+				BroadcastUIState()
+			end
 		end
 		return true
 	end
@@ -695,49 +545,30 @@ CategoryInputHandler = function(event)
 	-- Tab: Cycle Category Tabs (paced repeat rate limiting)
 	if btn == "DeviceButton_tab" or event.GameButton == "Select" then
 		local now = GetTimeSinceStart()
+		local dir = isShiftHeld and -1 or 1
 		if eventType == "InputEventType_FirstPress" then
 			lastTabTime = now
 			tabRepeatCount = 0
-			CycleCategory(isShiftHeld and -1 or 1)
+			CycleCategory(dir)
 			SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
-			return true
 		elseif eventType == "InputEventType_Repeat" then
-			if tabRepeatCount == 0 then
-				if (now - lastTabTime) >= TAB_INITIAL_DELAY then
-					lastTabTime = now
-					tabRepeatCount = 1
-					CycleCategory(isShiftHeld and -1 or 1)
-					SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
-				end
-			else
-				if (now - lastTabTime) >= TAB_REPEAT_INTERVAL then
-					lastTabTime = now
-					tabRepeatCount = tabRepeatCount + 1
-					CycleCategory(isShiftHeld and -1 or 1)
-					SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
-				end
+			local needed = (tabRepeatCount == 0) and TAB_INITIAL_DELAY or TAB_REPEAT_INTERVAL
+			if (now - lastTabTime) >= needed then
+				lastTabTime = now
+				tabRepeatCount = tabRepeatCount + 1
+				CycleCategory(dir)
+				SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
 			end
-			return true
 		end
-	end
-
-	-- [ / ]: Cycle Sub-Chips
-	if btn == "DeviceButton_left bracket" or btn == "DeviceButton_[" then
-		CycleSubChip(-1)
-		SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
-		return true
-	elseif btn == "DeviceButton_right bracket" or btn == "DeviceButton_]" then
-		CycleSubChip(1)
-		SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
 		return true
 	end
 
-	-- Left / Right or MenuLeft / MenuRight: Cycle Sub-Chips (pad or keyboard)
-	if btn == "DeviceButton_left" or event.GameButton == "MenuLeft" then
+	-- [ / ] and Left / Right (or MenuLeft / MenuRight): Cycle Sub-Chips
+	if btn == "DeviceButton_left bracket" or btn == "DeviceButton_[" or btn == "DeviceButton_left" or event.GameButton == "MenuLeft" then
 		CycleSubChip(-1)
 		SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
 		return true
-	elseif btn == "DeviceButton_right" or event.GameButton == "MenuRight" then
+	elseif btn == "DeviceButton_right bracket" or btn == "DeviceButton_]" or btn == "DeviceButton_right" or event.GameButton == "MenuRight" then
 		CycleSubChip(1)
 		SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
 		return true
@@ -752,7 +583,7 @@ CategoryInputHandler = function(event)
 		return true
 	end
 
-	-- Page Up / Page Down (jump 8 songs)
+	-- Page Up / Page Down
 	if btn == "DeviceButton_page up" then
 		ScrollSong(-maxRows)
 		return true
@@ -780,23 +611,44 @@ CategoryInputHandler = function(event)
 		return true
 	end
 
-	-- Enter / Start:
-	-- Un-redirect input and begin the song or transition to player options!
+	-- Enter / Start
 	if btn == "DeviceButton_enter" or event.GameButton == "Start" then
-		for pn in ivalues(PlayerNumber) do
-			SCREENMAN:set_input_redirected(pn, false)
-		end
-		local top = SCREENMAN:GetTopScreen()
-		if top and top.StartTransitioningScreen then
-			SOUND:PlayOnce(THEME:GetPathS("Common", "start"))
-			top:StartTransitioningScreen("SM_GoToNextScreen")
-			return true
-		end
+		if eventType == "InputEventType_FirstPress" then StartSelectedSong() end
 		return true
 	end
 
 	-- All other keys (like A-Z letters for instant type-to-search) pass through
 	return false
+end
+
+-- -------------------------------------------------------------
+-- Read-only/driver API (used by tests/keyboard_mode; harmless otherwise)
+-- -------------------------------------------------------------
+SL.Global.KbdModeAPI = SL.Global.KbdModeAPI or {}
+SL.Global.KbdModeAPI.engine = CategoryEngine
+SL.Global.KbdModeAPI.search = SongSearchEngine
+SL.Global.KbdModeAPI.catnav = {
+	Enter = function() EnterKeyboardMode() end,
+	Exit = function() ExitKeyboardMode() end,
+	Handle = function(e) return CategoryInputHandler(e) end,
+	SelectIndex = function(i) SelectSongAtIndex(i, false) end,
+	SetCategory = function(catIdx, chipIdx)
+		activeCategoryIdx = catIdx
+		activeSubChipIdx = chipIdx or 1
+		RefreshCategorySongs()
+	end,
+	State = function()
+		local e = currentSongs[selectedSongIdx]
+		return { active = isNavActive, selectedIdx = selectedSongIdx, total = #currentSongs,
+			selectedTitle = e and e.title or nil, categoryIdx = activeCategoryIdx, chipIdx = activeSubChipIdx }
+	end,
+}
+
+-- Dev-only scenario driver: loaded only if BOTH the flag and the file exist. The file is not
+-- part of cabinet deployments (see tools/deploy_cabinet.py), so this is inert in production.
+if FILEMAN:DoesFileExist("Save/dev_scenarios.flag") then
+	local devPath = THEME:GetCurrentThemeDirectory() .. "BGAnimations/ScreenSelectMusic overlay/CategoryNavigation/DevScenarios.lua"
+	if FILEMAN:DoesFileExist(devPath) then af[#af + 1] = LoadActor("DevScenarios.lua") end
 end
 
 return af

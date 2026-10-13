@@ -1,6 +1,6 @@
 -- CategorySongWheel.lua
 -- Virtual, high-performance song scroller for the active category in CategoryNavigation.
--- Renders 13 high-density cards with live metadata, difficulty badges, and scrollbar.
+-- Renders 14 high-density cards with live metadata, difficulty badges, and scrollbar.
 
 local CategorySongWheel = {}
 
@@ -30,8 +30,21 @@ local function FormatBPM(bpms)
 	end
 end
 
-local function GetSongDisplayMeter(entry)
+-- meterMin/meterMax: active METERS tier. When set, show the meter of the chart that MATCHED
+-- the tier (highest in range) instead of the player's preferred difficulty.
+local function GetSongDisplayMeter(entry, meterMin, meterMax)
 	if not entry then return "", Color.White end
+
+	if meterMin and entry.meters then
+		local bestDiff, bestMeter = nil, nil
+		for diff, m in pairs(entry.meters) do
+			if m >= meterMin and m <= meterMax and (not bestMeter or m > bestMeter) then
+				bestDiff, bestMeter = diff, m
+			end
+		end
+		if bestDiff then return tostring(bestMeter), DifficultyColor(bestDiff) end
+	end
+
 	local p = (GAMESTATE:IsPlayerEnabled(PLAYER_1) and PLAYER_1) or (GAMESTATE:IsPlayerEnabled(PLAYER_2) and PLAYER_2) or nil
 	local pDiff = p and GAMESTATE:GetPreferredDifficulty(p) or "Difficulty_Hard"
 
@@ -55,9 +68,10 @@ end
 
 local function IsSongFavorite(song)
 	if not song then return false end
-	for _, pn in ipairs({ "P1", "P2" }) do
-		if SL[pn] and SL[pn].Favorites and FindInTable then
-			if FindInTable(song, SL[pn].Favorites) then return true end
+	for _, pn in ipairs({ PLAYER_1, PLAYER_2 }) do
+		local short = ToEnumShortString(pn)
+		if GAMESTATE:IsPlayerEnabled(pn) and SL[short] and SL[short].Favorites and FindInTable then
+			if FindInTable(song, SL[short].Favorites) then return true end
 		end
 	end
 	return false
@@ -113,19 +127,19 @@ for r = 1, maxRows do
 			if isSelected then
 				cardBg:diffuse(color("0.13, 0.17, 0.26, 0.98"))
 				titleText:diffuse(Color.White)
-				titleText:zoom(0.49)
+				titleText:zoom(0.52)
 				subText:diffuse(color("#ccddee"))
-				subText:zoom(0.35)
+				subText:zoom(0.42)
 				bpmLengthText:diffuse(Color.White)
-				bpmLengthText:zoom(0.38)
+				bpmLengthText:zoom(0.44)
 			else
 				cardBg:diffuse(color("0.06, 0.08, 0.12, 0.90"))
 				titleText:diffuse(color("#c8d6e5"))
-				titleText:zoom(0.49)
-				subText:diffuse(color("#778899"))
-				subText:zoom(0.35)
-				bpmLengthText:diffuse(color("#778899"))
-				bpmLengthText:zoom(0.38)
+				titleText:zoom(0.52)
+				subText:diffuse(color("#8fa3b8"))
+				subText:zoom(0.42)
+				bpmLengthText:diffuse(color("#8fa3b8"))
+				bpmLengthText:zoom(0.44)
 			end
 
 			titleText:settext(entry.title or "")
@@ -150,7 +164,7 @@ for r = 1, maxRows do
 				bpmLengthText:settext(lenStr)
 			end
 
-			local mStr, mColor = GetSongDisplayMeter(entry)
+			local mStr, mColor = GetSongDisplayMeter(entry, params.meterMin, params.meterMax)
 			meterText:settext(mStr)
 			meterBadgeBg:diffuse(mColor)
 
@@ -233,10 +247,10 @@ for r = 1, maxRows do
 			Name = "TitleText",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 38)
-				self:y(-5)
+				self:y(-5.5)
 				self:horizalign(left)
-				self:zoom(0.49)
-				self:maxwidth((wheelW - 145) / 0.49)
+				self:zoom(0.52)
+				self:maxwidth((wheelW - 150) / 0.52)
 				self:diffuse(Color.White)
 				self:shadowlength(0)
 				self:settext("")
@@ -248,11 +262,11 @@ for r = 1, maxRows do
 			Name = "SubText",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 38)
-				self:y(5.5)
+				self:y(6)
 				self:horizalign(left)
-				self:zoom(0.35)
-				self:maxwidth((wheelW - 145) / 0.35)
-				self:diffuse(color("#778899"))
+				self:zoom(0.42)
+				self:maxwidth((wheelW - 150) / 0.42)
+				self:diffuse(color("#8fa3b8"))
 				self:shadowlength(0)
 				self:settext("")
 			end,
@@ -264,8 +278,8 @@ for r = 1, maxRows do
 			InitCommand = function(self)
 				self:x(wheelW / 2 - 8)
 				self:horizalign(right)
-				self:zoom(0.38)
-				self:diffuse(color("#778899"))
+				self:zoom(0.44)
+				self:diffuse(color("#8fa3b8"))
 				self:shadowlength(0)
 				self:settext("")
 			end,
@@ -329,13 +343,8 @@ local emptyStateAF = Def.ActorFrame {
 	UpdateCategoryUIMessageCommand = function(self, params)
 		if not params or not params.songs or #params.songs == 0 then
 			self:visible(true)
-			local catId = params and params.categoryId or ""
 			local sub = self:GetChild("EmptySubtitle")
-			if catId == "favorites" then
-				sub:settext("You haven't added any favorites yet.\nPress [ Ctrl + D ] to favorite any song!")
-			else
-				sub:settext("No songs match this category filter.\nPress [ Left / Right ] or [ Tab ] to browse other categories.")
-			end
+			sub:settext((params and params.emptyHint) or "No songs match this category filter.")
 		else
 			self:visible(false)
 		end

@@ -10,7 +10,7 @@ local ribbonX = IsUsingWideScreen() and (_screen.cx + _screen.w/4) or (_screen.c
 local ribbonW = IsUsingWideScreen() and 396 or 300
 
 local categories = CategoryEngine.GetCategories()
-local numTabs = 6 -- PACKS, FAVORITES, METERS, BPM, RANKED, A-Z
+local numTabs = #categories
 
 local af = Def.ActorFrame {
 	Name = "CategoryRibbonRoot",
@@ -101,7 +101,7 @@ for i = 1, numTabs do
 			Name = "TabLabel",
 			InitCommand = function(self)
 				self:y(-1)
-				self:zoom(0.40)
+				self:zoom(0.44)
 				self:shadowlength(0)
 				self:settext(cat.name)
 				if i == 1 then
@@ -133,7 +133,7 @@ af[#af + 1] = tabContainer
 -- -------------------------------------------------------------
 local maxVisualTabs = 9
 local keyW = IsUsingWideScreen() and 44 or 36
-local keyTextZoom = IsUsingWideScreen() and 0.33 or 0.28
+local keyTextZoom = IsUsingWideScreen() and 0.37 or 0.30
 local leftKeyX = -ribbonW / 2 + keyW / 2 + 2
 local rightKeyX = ribbonW / 2 - keyW / 2 - 2
 local tabAreaW = (rightKeyX - keyW / 2 - 3) - (leftKeyX + keyW / 2 + 3)
@@ -171,10 +171,10 @@ local function GetChipShortLabel(catId, chip)
 		if id == "p1_fav" then return "P1 Fav" end
 		if id == "p2_fav" then return "P2 Fav" end
 		if id == "recents" then return "Recent" end
-	elseif catId == "groovestats" then
-		if id == "all" then return "All Ranked" end
-		if id == "events" then return "Events" end
+	elseif catId == "played" then
+		if id == "all" then return "Played" end
 		if id == "unplayed" then return "Unplayed" end
+		if id == "cleared" then return "Cleared" end
 	end
 	return chip.label or id or ""
 end
@@ -348,7 +348,7 @@ for slot = 1, maxVisualTabs do
 			Name = "TabLabel",
 			InitCommand = function(self)
 				self:y(-0.5)
-				self:zoom(0.33)
+				self:zoom(0.36)
 				self:shadowlength(0)
 				self:diffuse(color("#8899aa"))
 				self:settext("")
@@ -446,7 +446,7 @@ local function UpdateVisualTabs(self, params)
 					bg:diffuse(themeColor):diffusealpha(0.90)
 					glow:diffuse(Color.White):diffusealpha(0.8)
 					lbl:diffuse(Color.White)
-					local activeZoom = IsUsingWideScreen() and 0.34 or 0.28
+					local activeZoom = IsUsingWideScreen() and 0.38 or 0.30
 					lbl:zoom(activeZoom)
 					lbl:maxwidth((quadW - 4) / activeZoom)
 					local txt = ""
@@ -461,7 +461,7 @@ local function UpdateVisualTabs(self, params)
 					bg:diffuse(color("0.10, 0.12, 0.16, 0.85"))
 					glow:diffuse(color("0.25, 0.28, 0.35, 0.35"))
 					lbl:diffuse(color("#8899aa"))
-					local inactiveZoom = IsUsingWideScreen() and 0.32 or 0.26
+					local inactiveZoom = IsUsingWideScreen() and 0.36 or 0.28
 					lbl:zoom(inactiveZoom)
 					lbl:maxwidth((quadW - 4) / inactiveZoom)
 					local sLbl = GetChipShortLabel(catId, chip)
@@ -504,7 +504,7 @@ local function UpdateVisualTabs(self, params)
 				bg:diffuse(themeColor):diffusealpha(0.90)
 				glow:diffuse(Color.White):diffusealpha(0.8)
 				lbl:diffuse(Color.White)
-				local cZoom = IsUsingWideScreen() and 0.34 or 0.28
+				local cZoom = IsUsingWideScreen() and 0.38 or 0.30
 				lbl:zoom(cZoom)
 				lbl:maxwidth((quadW - 6) / cZoom)
 				lbl:settext(string.format("[%d/%d]  %s (%d)", activeIdx, numChips, chip.label or "", totalSongs))
@@ -512,7 +512,7 @@ local function UpdateVisualTabs(self, params)
 				bg:diffuse(color("0.10, 0.12, 0.16, 0.85"))
 				glow:diffuse(color("0.25, 0.28, 0.35, 0.35"))
 				lbl:diffuse(color("#778899"))
-				local sZoom = IsUsingWideScreen() and 0.31 or 0.25
+				local sZoom = IsUsingWideScreen() and 0.35 or 0.28
 				lbl:zoom(sZoom)
 				lbl:maxwidth((quadW - 4) / sZoom)
 				lbl:settext(chip.label or "")

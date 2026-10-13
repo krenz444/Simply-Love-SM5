@@ -1,3 +1,18 @@
+-- PreferredStyle "single" with BOTH players still joined (e.g. left over from a previous set):
+-- drop the NON-master player so P2's panes/step artist/density graph do not overlap P1's.
+-- The master player always stays. (Upstream's Branch.AfterScreenSelectColor handles the same case
+-- on the way INTO this screen by unjoining PLAYER_2; this covers state that arrives mid-session.)
+local ResolveSingleStyleJoin = function()
+	if ThemePrefs.Get("PreferredStyle") == "single"
+		and GAMESTATE:IsHumanPlayer(PLAYER_1) and GAMESTATE:IsHumanPlayer(PLAYER_2) then
+		local master = GAMESTATE:GetMasterPlayerNumber()
+		GAMESTATE:UnjoinPlayer(master == PLAYER_1 and PLAYER_2 or PLAYER_1)
+		GAMESTATE:SetCurrentStyle("single")
+	end
+end
+SL.Global.KbdModeAPI = SL.Global.KbdModeAPI or {}
+SL.Global.KbdModeAPI.resolveSingleStyleJoin = ResolveSingleStyleJoin
+
 local af = Def.ActorFrame{
 	-- GameplayReloadCheck is a kludgy global variable used in ScreenGameplay in.lua to check
 	-- if ScreenGameplay is being entered "properly" or being reloaded by a scripted mod-chart.
@@ -12,12 +27,7 @@ local af = Def.ActorFrame{
 		local songOptions = GAMESTATE:GetSongOptionsObject("ModsLevel_Preferred")
 		songOptions:MusicRate(SL.Global.ActiveModifiers.MusicRate)
 
-		-- If preferred style is "single" (or only P1 should be playing), ensure PLAYER_2
-		-- is cleanly unjoined so its panes, stepartist, and density graphs do not overlap P1
-		if ThemePrefs.Get("PreferredStyle") == "single" and GAMESTATE:IsHumanPlayer(PLAYER_2) then
-			GAMESTATE:UnjoinPlayer(PLAYER_2)
-			GAMESTATE:SetCurrentStyle("single")
-		end
+		ResolveSingleStyleJoin()
 	end,
 
 	PlayerProfileSetMessageCommand=function(self, params)
