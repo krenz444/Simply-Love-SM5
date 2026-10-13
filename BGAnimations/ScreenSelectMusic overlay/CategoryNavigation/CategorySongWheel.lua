@@ -342,9 +342,9 @@ af[#af + 1] = Def.ActorFrame {
 			local total = #params.songs
 			local sel = params.selectedIdx or 1
 			if total == 0 then
-				self:settext("0 Songs   •   [Tab] Category   •   [ [ / ] ] Filter")
+				self:settext("0 Songs   •   [Tab] Category   •   [ [ / ] ] Filter   •   [Esc] Wheel Mode")
 			else
-				self:settext(string.format("Song %d of %d   •   [Tab] Category   •   [ [ / ] ] Filter", sel, total))
+				self:settext(string.format("Song %d of %d   •   [Tab] Category   •   [ [ / ] ] Filter   •   [Esc] Wheel Mode", sel, total))
 			end
 		end,
 	},

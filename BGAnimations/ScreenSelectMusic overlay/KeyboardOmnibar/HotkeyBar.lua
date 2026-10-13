@@ -122,13 +122,18 @@ local bottomLegend = Def.ActorFrame {
 	InitCommand = function(self)
 		self:xy(bottomX, _screen.h - 18)
 	end,
+	CategoryNavigationModeChangedMessageCommand = function(self, params)
+		if params and params.active ~= nil then
+			self:visible(not params.active)
+		end
+	end,
 
 	LoadFont("Common Normal") .. {
 		InitCommand = function(self)
 			self:zoom(0.44)
 			self:diffuse(color("#ddeeff"))
-			self:shadowlength(0.2)
-			self:settext("[ [ / ] ] Skip Pack   |   [ Ctrl+S ] Sort   |   [ Ctrl+1-5 ] Diff")
+			self:shadowlength(0)
+			self:settext("[Tab] Keyboard Mode   |   [/] Search   |   [ [ / ] ] Skip Pack")
 		end,
 	},
 }

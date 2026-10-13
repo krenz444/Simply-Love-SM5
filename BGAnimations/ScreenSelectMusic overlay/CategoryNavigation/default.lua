@@ -1,13 +1,18 @@
 -- CategoryNavigation/default.lua
 -- Master controller and input router for Category Navigation in Simply Love.
 -- Unifies CategoryEngine, CategoryRibbon, and CategorySongWheel.
+-- Provides seamless instant switching between Normal Scroll Wheel and Keyboard Mode at any time.
 
 local CategoryEngine = LoadActor("CategoryEngine.lua")
 local CategoryRibbon = LoadActor("CategoryRibbon.lua")
 local CategorySongWheel = LoadActor("CategorySongWheel.lua")
 
+-- References to UI Actors
+local rootActor = nil
+
 -- State variables
 local isNavActive = false
+local wasNavActiveBeforeOmnibar = false
 local activeCategoryIdx = 1
 local activeSubChipIdx = 1
 local currentSongs = {}
@@ -20,8 +25,16 @@ local isCtrlHeld = false
 
 local categories = CategoryEngine.GetCategories()
 
+-- Forward declarations
+local CategoryInputHandler = nil
+local BroadcastUIState = nil
+local SyncCurrentSong = nil
+local RefreshCategorySongs = nil
+local EnterKeyboardMode = nil
+local ExitKeyboardMode = nil
+
 -- Broadcast UI State to Ribbon and SongWheel
-local function BroadcastUIState()
+BroadcastUIState = function()
 	local cat = categories[activeCategoryIdx]
 	if not cat then return end
 	local subChips = CategoryEngine.GetSubChips(cat.id)
@@ -39,7 +52,7 @@ local function BroadcastUIState()
 end
 
 -- Sync current song with StepMania engine and native MusicWheel
-local function SyncCurrentSong(song)
+SyncCurrentSong = function(song)
 	if not song then return end
 	GAMESTATE:SetPreferredSong(song)
 	GAMESTATE:SetCurrentSong(song)
@@ -62,7 +75,7 @@ local function SyncCurrentSong(song)
 end
 
 -- Refresh Songs for active Category & SubChip
-local function RefreshCategorySongs()
+RefreshCategorySongs = function()
 	local cat = categories[activeCategoryIdx]
 	if not cat then return end
 
@@ -141,13 +154,81 @@ local function ScrollSong(delta)
 	end
 end
 
+-- Enter Keyboard Mode (Hide native wheel, show category navigation)
+EnterKeyboardMode = function()
+	isNavActive = true
+	local top = SCREENMAN:GetTopScreen()
+	if top and top.GetMusicWheel then
+		local wheel = top:GetMusicWheel()
+		if wheel then
+			wheel:visible(false)
+			wheel:diffusealpha(0)
+		end
+	end
+
+	if rootActor then
+		rootActor:visible(true)
+	end
+
+	local curSong = GAMESTATE:GetCurrentSong()
+	RefreshCategorySongs()
+
+	-- If a song was already selected on the native wheel, attempt to position on it
+	if curSong and #currentSongs > 0 then
+		for idx, entry in ipairs(currentSongs) do
+			if entry.song == curSong then
+				selectedSongIdx = idx
+				if selectedSongIdx < topVisibleIdx or selectedSongIdx >= topVisibleIdx + maxRows then
+					topVisibleIdx = math.max(1, math.min(#currentSongs - maxRows + 1, selectedSongIdx - 2))
+				end
+				break
+			end
+		end
+	end
+
+	SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
+	BroadcastUIState()
+	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = true })
+end
+
+-- Exit Keyboard Mode (Hide category navigation, restore normal scroll wheel)
+ExitKeyboardMode = function()
+	isNavActive = false
+	if rootActor then
+		rootActor:visible(false)
+	end
+
+	local top = SCREENMAN:GetTopScreen()
+	if top and top.GetMusicWheel then
+		local wheel = top:GetMusicWheel()
+		if wheel then
+			wheel:visible(true)
+			wheel:diffusealpha(1)
+			local curSong = GAMESTATE:GetCurrentSong()
+			if curSong and wheel.SelectSong then
+				if wheel.SetOpenSection and curSong.GetGroupName then
+					wheel:SetOpenSection(curSong:GetGroupName())
+				end
+				wheel:SelectSong(curSong)
+				wheel:Move(1)
+				wheel:Move(-1)
+				wheel:Move(0)
+			end
+		end
+	end
+
+	SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
+	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
+end
+
 -- Master Actor Frame
 local af = Def.ActorFrame {
 	Name = "CategoryNavigationMaster",
 	InitCommand = function(self)
-		local isEnabled = (ThemePrefs.Get("CategoryNavigation") == true)
-		self:visible(isEnabled)
-		isNavActive = isEnabled
+		rootActor = self
+		local startInCatNav = (ThemePrefs.Get("CategoryNavigation") == true)
+		self:visible(startInCatNav)
+		isNavActive = startInCatNav
 	end,
 	OnCommand = function(self)
 		local top = SCREENMAN:GetTopScreen()
@@ -155,11 +236,11 @@ local af = Def.ActorFrame {
 			top:AddInputCallback(CategoryInputHandler)
 		end
 
-		local isEnabled = (ThemePrefs.Get("CategoryNavigation") == true)
-		self:visible(isEnabled)
-		isNavActive = isEnabled
+		local startInCatNav = (ThemePrefs.Get("CategoryNavigation") == true)
+		self:visible(startInCatNav)
+		isNavActive = startInCatNav
 
-		if isEnabled then
+		if startInCatNav then
 			if top and top.GetMusicWheel then
 				local wheel = top:GetMusicWheel()
 				if wheel then
@@ -168,12 +249,43 @@ local af = Def.ActorFrame {
 				end
 			end
 			RefreshCategorySongs()
-
-			if FILEMAN:DoesFileExist("Save/run_category_test.flag") then
-				Trace("CATEGORY_TEST: Flag detected, starting test sequence")
-				self:sleep(1.0):queuecommand("TestCatReady")
+		else
+			-- Ensure normal wheel is visible and active
+			if top and top.GetMusicWheel then
+				local wheel = top:GetMusicWheel()
+				if wheel then
+					wheel:visible(true)
+					wheel:diffusealpha(1)
+				end
 			end
 		end
+
+		if FILEMAN:DoesFileExist("Save/run_category_test.flag") then
+			Trace("CATEGORY_TEST: Flag detected, starting test sequence")
+			self:sleep(1.0):queuecommand("TestCatReady")
+		end
+
+		if FILEMAN:DoesFileExist("Save/run_switch_test.flag") then
+			Trace("SWITCH_TEST: Flag detected, starting mode switch test sequence")
+			self:sleep(1.0):queuecommand("TestSwitchInitial")
+		end
+	end,
+	TestSwitchInitialCommand = function(self)
+		Trace("SWITCH_TEST_STEP: wheel_initial")
+		self:sleep(1.5):queuecommand("TestSwitchEnterKey")
+	end,
+	TestSwitchEnterKeyCommand = function(self)
+		EnterKeyboardMode()
+		Trace("SWITCH_TEST_STEP: keyboard_switched")
+		self:sleep(1.5):queuecommand("TestSwitchExitKey")
+	end,
+	TestSwitchExitKeyCommand = function(self)
+		ExitKeyboardMode()
+		Trace("SWITCH_TEST_STEP: wheel_returned")
+		self:sleep(1.5):queuecommand("TestSwitchDone")
+	end,
+	TestSwitchDoneCommand = function(self)
+		Trace("SWITCH_TEST_STEP: finished")
 	end,
 	TestCatReadyCommand = function(self)
 		Trace("CATEGORY_TEST_STEP: cat_ready")
@@ -211,34 +323,33 @@ local af = Def.ActorFrame {
 	end,
 	ShowOmnibarMessageCommand = function(self)
 		self:visible(false)
+		wasNavActiveBeforeOmnibar = isNavActive
 		isNavActive = false
 	end,
 	HideOmnibarMessageCommand = function(self)
-		local isEnabled = (ThemePrefs.Get("CategoryNavigation") == true)
-		self:visible(isEnabled)
-		isNavActive = isEnabled
-		if isEnabled then
+		if wasNavActiveBeforeOmnibar then
+			self:visible(true)
+			isNavActive = true
 			BroadcastUIState()
+		else
+			self:visible(false)
+			isNavActive = false
 		end
 	end,
-	TestCategoryNavNextTabCommand = function(self)
-		CycleCategory(1)
-	end,
-	TestCategoryNavNextChipCommand = function(self)
-		CycleSubChip(1)
-	end,
-	TestCategoryNavDownCommand = function(self)
-		ScrollSong(1)
+	ToggleCategoryNavigationMessageCommand = function(self)
+		if isNavActive then
+			ExitKeyboardMode()
+		else
+			EnterKeyboardMode()
+		end
 	end,
 }
 
 af[#af + 1] = CategoryRibbon
 af[#af + 1] = CategorySongWheel
 
--- Input Router for Category Navigation
-function CategoryInputHandler(event)
-	if not ThemePrefs.Get("CategoryNavigation") then return false end
-	if not isNavActive then return false end
+-- Input Router for Category Navigation & Mode Switching
+CategoryInputHandler = function(event)
 	if not event or not event.DeviceInput then return false end
 
 	local btn = event.DeviceInput.button
@@ -256,6 +367,38 @@ function CategoryInputHandler(event)
 
 	local isDown = (eventType == "InputEventType_FirstPress" or eventType == "InputEventType_Repeat")
 	if not isDown then return false end
+
+	-- =========================================================
+	-- CASE 1: In Normal Scroll Wheel Mode (isNavActive == false)
+	-- =========================================================
+	if not isNavActive then
+		-- Check if player pressed Tab, F3, or Ctrl+K to switch into Keyboard Mode!
+		if btn == "DeviceButton_tab" or btn == "DeviceButton_f3" or (isCtrlHeld and (btn == "DeviceButton_k" or btn == "DeviceButton_K")) then
+			EnterKeyboardMode()
+			return true
+		end
+
+		-- All other inputs (arcade cabinet buttons MenuLeft, MenuRight, MenuUp, MenuDown, Start, Select,
+		-- and keyboard arrows / alphanumeric letters) pass through completely!
+		-- Standard DDR cabinet input works natively with 100% Simply Love wheel behavior!
+		return false
+	end
+
+	-- =========================================================
+	-- CASE 2: In Keyboard Mode (isNavActive == true)
+	-- =========================================================
+
+	-- Escape, Back, F3, or Ctrl+K: Switch BACK to Normal Scroll Wheel at any time!
+	if btn == "DeviceButton_escape" or btn == "DeviceButton_f3" or (isCtrlHeld and (btn == "DeviceButton_k" or btn == "DeviceButton_K")) or event.GameButton == "Back" then
+		ExitKeyboardMode()
+		return true
+	end
+
+	-- Omnibar / Search hotkeys:
+	if btn == "DeviceButton_slash" or (isCtrlHeld and (btn == "DeviceButton_f" or btn == "DeviceButton_F")) then
+		MESSAGEMAN:Broadcast("OpenOmnibarWithQuery", { query = "" })
+		return true
+	end
 
 	-- Tab: Cycle Category Tabs
 	if btn == "DeviceButton_tab" or event.GameButton == "Select" then
@@ -275,7 +418,7 @@ function CategoryInputHandler(event)
 		return true
 	end
 
-	-- Left / Right or MenuLeft / MenuRight: Cycle Sub-Chips
+	-- Left / Right or MenuLeft / MenuRight: Cycle Sub-Chips (pad or keyboard)
 	if btn == "DeviceButton_left" or event.GameButton == "MenuLeft" then
 		CycleSubChip(-1)
 		SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
@@ -286,7 +429,7 @@ function CategoryInputHandler(event)
 		return true
 	end
 
-	-- Up / Down or MenuUp / MenuDown: Navigate Song List
+	-- Up / Down or MenuUp / MenuDown: Navigate Song List (pad or keyboard)
 	if btn == "DeviceButton_up" or event.GameButton == "MenuUp" then
 		ScrollSong(-1)
 		return true

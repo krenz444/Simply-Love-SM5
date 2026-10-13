@@ -145,7 +145,7 @@ SL_CustomPrefs.Get = function()
 			Values  = { "qwerty", "colemak", "colemak-dh", "windows_auto" }
 		},
 		CategoryNavigation = {
-			Default = true,
+			Default = false,
 			Choices = { THEME:GetString("ThemePrefs","Yes"), THEME:GetString("ThemePrefs", "No") },
 			Values  = { true, false }
 		},
