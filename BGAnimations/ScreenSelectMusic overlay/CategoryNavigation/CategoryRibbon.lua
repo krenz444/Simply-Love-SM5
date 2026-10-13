@@ -166,15 +166,15 @@ local chipsContainer = Def.ActorFrame {
 			local activeIdx = params.subChipIdx or 1
 			local totalSongs = params.totalSongs or 0
 
-			if catId == "packs" then
+			if #subChips > 4 then
 				local curChip = subChips[activeIdx]
-				local packName = curChip and curChip.label or "All Packs"
-				self:settext(string.format("< Left   [%d/%d] %s (%d songs)   Right >", activeIdx, #subChips, packName, totalSongs))
+				local curLabel = curChip and curChip.label or ""
+				self:settext(string.format("< Left   [%d/%d] %s (%d songs)   Right >", activeIdx, #subChips, curLabel, totalSongs))
 			else
 				local parts = {}
 				for idx, chip in ipairs(subChips) do
 					if idx == activeIdx then
-						parts[#parts + 1] = "[ " .. chip.label .. " ]"
+						parts[#parts + 1] = "[ " .. chip.label .. " (" .. totalSongs .. ") ]"
 					else
 						parts[#parts + 1] = chip.label
 					end

@@ -100,9 +100,15 @@ for r = 1, maxRows do
 			cardHighlight:visible(isSelected)
 			leftAccent:visible(isSelected)
 			if isSelected then
-				cardBg:diffuse(color("0.12, 0.16, 0.24, 0.96"))
+				cardBg:diffuse(color("0.13, 0.17, 0.26, 0.98"))
+				titleText:diffuse(Color.White)
+				titleText:zoom(0.57)
+				subText:diffuse(color("#ccddee"))
 			else
 				cardBg:diffuse(color("0.06, 0.08, 0.12, 0.90"))
+				titleText:diffuse(color("#c8d6e5"))
+				titleText:zoom(0.53)
+				subText:diffuse(color("#778899"))
 			end
 
 			titleText:settext(entry.title or "")
@@ -137,20 +143,20 @@ for r = 1, maxRows do
 			Name = "CardHighlight",
 			InitCommand = function(self)
 				self:zoomto(wheelW, rowHeight - 3)
-				self:diffuse(GetCurrentColor()):diffusealpha(0.25)
+				self:diffuse(GetCurrentColor()):diffusealpha(0.32)
 				self:visible(false)
 			end,
 			ColorSelectedMessageCommand = function(self)
-				self:diffuse(GetCurrentColor()):diffusealpha(0.25)
+				self:diffuse(GetCurrentColor()):diffusealpha(0.32)
 			end,
 		},
 
-		-- Left selection accent pill
+		-- Left selection accent indicator (prominent 6px cursor bar)
 		Def.Quad {
 			Name = "LeftAccent",
 			InitCommand = function(self)
-				self:x(-wheelW / 2 + 2)
-				self:zoomto(4, rowHeight - 3)
+				self:x(-wheelW / 2 + 3)
+				self:zoomto(6, rowHeight - 3)
 				self:diffuse(GetCurrentColor())
 				self:visible(false)
 			end,
@@ -175,7 +181,7 @@ for r = 1, maxRows do
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 24)
 				self:zoom(0.58)
-				self:shadowlength(0.2)
+				self:shadowlength(0)
 				self:diffuse(Color.White)
 				self:settext("")
 			end,
@@ -191,7 +197,7 @@ for r = 1, maxRows do
 				self:zoom(0.55)
 				self:maxwidth((wheelW - 145) / 0.55)
 				self:diffuse(Color.White)
-				self:shadowlength(0.2)
+				self:shadowlength(0)
 				self:settext("")
 			end,
 		},
@@ -206,6 +212,7 @@ for r = 1, maxRows do
 				self:zoom(0.40)
 				self:maxwidth((wheelW - 145) / 0.40)
 				self:diffuse(color("#8899aa"))
+				self:shadowlength(0)
 				self:settext("")
 			end,
 		},

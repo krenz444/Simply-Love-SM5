@@ -140,7 +140,47 @@ local function SelectSongAtIndex(idx, playSound)
 		SOUND:PlayOnce(THEME:GetPathS("MusicWheel", "change"))
 	end
 
+	if rootActor then
+		rootActor:stoptweening()
+		rootActor:sleep(0.12)
+		rootActor:queuecommand("TriggerAudioPreview")
+	end
+
 	BroadcastUIState()
+end
+
+-- Direct Difficulty Selection (1-5)
+local diffKeyMap = {
+	["1"] = "Difficulty_Beginner",
+	["2"] = "Difficulty_Easy",
+	["3"] = "Difficulty_Medium",
+	["4"] = "Difficulty_Hard",
+	["5"] = "Difficulty_Challenge",
+}
+
+local function SetDifficultyDirect(diffKey)
+	local targetDiff = diffKeyMap[diffKey]
+	if not targetDiff then return false end
+
+	local song = GAMESTATE:GetCurrentSong()
+	local style = GAMESTATE:GetCurrentStyle()
+	if not song or not style then return false end
+
+	local st = style:GetStepsType()
+	local steps = song:GetOneSteps(st, targetDiff)
+	if steps then
+		for pn in ivalues(GAMESTATE:GetHumanPlayers()) do
+			GAMESTATE:SetCurrentSteps(pn, steps)
+			GAMESTATE:SetPreferredDifficulty(pn, targetDiff)
+			local pShort = ToEnumShortString(pn)
+			MESSAGEMAN:Broadcast("CurrentSteps" .. pShort .. "Changed")
+		end
+		MESSAGEMAN:Broadcast("CurrentStepsChanged")
+		SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "difficulty easier"))
+		BroadcastUIState()
+		return true
+	end
+	return false
 end
 
 -- Scroll song by delta
@@ -355,6 +395,11 @@ local af = Def.ActorFrame {
 			EnterKeyboardMode()
 		end
 	end,
+	TriggerAudioPreviewCommand = function(self)
+		if isNavActive then
+			play_sample_music()
+		end
+	end,
 }
 
 af[#af + 1] = CategoryRibbon
@@ -466,6 +511,14 @@ CategoryInputHandler = function(event)
 	elseif btn == "DeviceButton_end" then
 		SelectSongAtIndex(#currentSongs, true)
 		return true
+	end
+
+	-- Number keys 1-5 (top row or numpad): Direct Difficulty Selection
+	local numKey = btn:match("^DeviceButton_([1-5])$") or btn:match("^DeviceButton_kp%s*([1-5])$") or btn:match("^DeviceButton_KP%s*([1-5])$")
+	if numKey then
+		if SetDifficultyDirect(numKey) then
+			return true
+		end
 	end
 
 	-- Enter / Start:
