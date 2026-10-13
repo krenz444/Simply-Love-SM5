@@ -52,6 +52,16 @@ local function GetSongDisplayMeter(entry)
 	return "?", Color.White
 end
 
+local function IsSongFavorite(song)
+	if not song then return false end
+	for _, pn in ipairs({ "P1", "P2" }) do
+		if SL[pn] and SL[pn].Favorites and FindInTable then
+			if FindInTable(song, SL[pn].Favorites) then return true end
+		end
+	end
+	return false
+end
+
 local af = Def.ActorFrame {
 	Name = "CategorySongWheelRoot",
 	InitCommand = function(self)
@@ -127,6 +137,10 @@ for r = 1, maxRows do
 			local mStr, mColor = GetSongDisplayMeter(entry)
 			meterText:settext(mStr)
 			meterBadgeBg:diffuse(mColor)
+
+			local favBorder = self:GetChild("FavBadgeBorder")
+			local isFav = entry.song and IsSongFavorite(entry.song) or false
+			favBorder:visible(isFav)
 		end,
 
 		-- Card backdrop
@@ -162,6 +176,17 @@ for r = 1, maxRows do
 			end,
 			ColorSelectedMessageCommand = function(self)
 				self:diffuse(GetCurrentColor())
+			end,
+		},
+
+		-- Favorite Glowing Gold Border around Meter Badge
+		Def.Quad {
+			Name = "FavBadgeBorder",
+			InitCommand = function(self)
+				self:x(-wheelW / 2 + 24)
+				self:zoomto(32, 26)
+				self:diffuse(color("#ffd700"))
+				self:visible(false)
 			end,
 		},
 
@@ -315,6 +340,70 @@ af[#af + 1] = Def.ActorFrame {
 }
 
 -- -------------------------------------------------------------
+-- Empty State Helper (displayed when 0 songs match category/filter)
+-- -------------------------------------------------------------
+local emptyStateAF = Def.ActorFrame {
+	Name = "EmptyStateMessage",
+	InitCommand = function(self)
+		self:y(startY + trackH / 2 - rowHeight / 2)
+		self:visible(false)
+	end,
+	UpdateCategoryUIMessageCommand = function(self, params)
+		if not params or not params.songs or #params.songs == 0 then
+			self:visible(true)
+			local catId = params and params.categoryId or ""
+			local sub = self:GetChild("EmptySubtitle")
+			if catId == "favorites" then
+				sub:settext("You haven't added any favorites yet.\nPress [Ctrl+D] or pad Select code to favorite any song!")
+			else
+				sub:settext("No songs match this category filter.\nPress [Left / Right] or [Tab] to browse other categories.")
+			end
+		else
+			self:visible(false)
+		end
+	end,
+
+	-- Border hairline
+	Def.Quad {
+		InitCommand = function(self)
+			self:zoomto(wheelW - 38, 76)
+			self:diffuse(color("0.16, 0.20, 0.28, 0.85"))
+		end,
+	},
+	-- Background surface
+	Def.Quad {
+		InitCommand = function(self)
+			self:zoomto(wheelW - 40, 74)
+			self:diffuse(color("0.07, 0.09, 0.13, 0.96"))
+		end,
+	},
+	-- Title
+	LoadFont("Common Normal") .. {
+		Name = "EmptyTitle",
+		InitCommand = function(self)
+			self:y(-14)
+			self:zoom(0.66)
+			self:diffuse(color("#ffaa55"))
+			self:shadowlength(0)
+			self:settext("NO SONGS FOUND")
+		end,
+	},
+	-- Subtitle explanation
+	LoadFont("Common Normal") .. {
+		Name = "EmptySubtitle",
+		InitCommand = function(self)
+			self:y(14)
+			self:zoom(0.44)
+			self:diffuse(color("#8899aa"))
+			self:shadowlength(0)
+			self:settext("")
+		end,
+	},
+}
+
+af[#af + 1] = emptyStateAF
+
+-- -------------------------------------------------------------
 -- Dual-Tier Navigation Control HUD (y = 401 & y = 424)
 -- Tier 1: Primary Actions (Song Count, Play Confirmation, Browse, Return)
 -- Tier 2: Hotkeys & Secondary Controls (Category, Filter, Search, Difficulty)
@@ -399,10 +488,10 @@ local hudAF = Def.ActorFrame {
 		LoadFont("Common Normal") .. {
 			Name = "SecondaryControlsText",
 			InitCommand = function(self)
-				self:zoom(0.40)
+				self:zoom(0.38)
 				self:shadowlength(0)
 				self:diffuse(color("#aaccdd"))
-				self:settext("[Tab] Category   •   [Left/Right] Filter   •   Type to Search   •   [1-5] Diff")
+				self:settext("[Tab] Category   •   [Left/Right] Filter   •   Type to Search   •   [1-5] Diff   •   [Ctrl+D] Fav")
 			end,
 		},
 	},

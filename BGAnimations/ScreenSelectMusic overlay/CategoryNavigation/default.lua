@@ -371,14 +371,39 @@ local af = Def.ActorFrame {
 			self:visible(true)
 			isNavActive = true
 			local curSong = GAMESTATE:GetCurrentSong()
-			if curSong and #currentSongs > 0 then
+			if curSong then
+				local found = false
 				for idx, entry in ipairs(currentSongs) do
 					if entry.song == curSong then
 						selectedSongIdx = idx
 						if selectedSongIdx < topVisibleIdx or selectedSongIdx >= topVisibleIdx + maxRows then
 							topVisibleIdx = math.max(1, math.min(#currentSongs - maxRows + 1, selectedSongIdx - 2))
 						end
+						found = true
 						break
+					end
+				end
+
+				-- If the song is NOT in the current category/subchip, automatically switch to PACKS category
+				-- and locate the song's pack so the wheel displays the newly selected song seamlessly!
+				if not found and curSong.GetGroupName then
+					local packName = curSong:GetGroupName()
+					activeCategoryIdx = 1 -- Switch to PACKS category
+					local subChips = CategoryEngine.GetSubChips("packs")
+					activeSubChipIdx = 1
+					for cIdx, chip in ipairs(subChips) do
+						if chip.id == packName then
+							activeSubChipIdx = cIdx
+							break
+						end
+					end
+					RefreshCategorySongs()
+					for idx, entry in ipairs(currentSongs) do
+						if entry.song == curSong then
+							selectedSongIdx = idx
+							topVisibleIdx = math.max(1, math.min(#currentSongs - maxRows + 1, selectedSongIdx - 2))
+							break
+						end
 					end
 				end
 			end
@@ -386,6 +411,15 @@ local af = Def.ActorFrame {
 		else
 			self:visible(false)
 			isNavActive = false
+		end
+	end,
+	CodeMessageCommand = function(self, params)
+		if params and (params.Name == "Favorite1" or params.Name == "Favorite2") then
+			if categories[activeCategoryIdx] and categories[activeCategoryIdx].id == "favorites" then
+				RefreshCategorySongs()
+			else
+				BroadcastUIState()
+			end
 		end
 	end,
 	ToggleCategoryNavigationMessageCommand = function(self)
@@ -454,6 +488,20 @@ CategoryInputHandler = function(event)
 	-- Omnibar / Search hotkeys:
 	if btn == "DeviceButton_slash" or (isCtrlHeld and (btn == "DeviceButton_f" or btn == "DeviceButton_F")) then
 		MESSAGEMAN:Broadcast("OpenOmnibarWithQuery", { query = "" })
+		return true
+	end
+
+	-- Ctrl+D or Ctrl+B: Toggle Favorite on current song
+	if isCtrlHeld and (btn == "DeviceButton_d" or btn == "DeviceButton_D" or btn == "DeviceButton_b" or btn == "DeviceButton_B") then
+		for pn in ivalues(GAMESTATE:GetHumanPlayers()) do
+			addOrRemoveFavorite(pn)
+			break
+		end
+		if categories[activeCategoryIdx] and categories[activeCategoryIdx].id == "favorites" then
+			RefreshCategorySongs()
+		else
+			BroadcastUIState()
+		end
 		return true
 	end
 
