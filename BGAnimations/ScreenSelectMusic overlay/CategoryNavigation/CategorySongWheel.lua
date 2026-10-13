@@ -430,16 +430,16 @@ local hudAF = Def.ActorFrame {
 			local sel = params.selectedIdx or 1
 			if total == 0 then
 				if IsUsingWideScreen() then
-					self:settext("0 Songs   •   [ Tab ] Category   •   [ Left / Right ] Filter   •   [ Esc ] Wheel")
+					self:settext("0 Songs   •   [ Tab ] Category   •   [ Left / Right ] Tabs   •   [ Esc ] Wheel")
 				else
-					self:settext("0 Songs   •   [ Tab ] Cat   •   [ L / R ] Filter   •   [ Esc ] Wheel")
+					self:settext("0 Songs   •   [ Tab ] Cat   •   [ L / R ] Tabs   •   [ Esc ] Wheel")
 				end
 				self:diffuse(color("#ffaa66"))
 			else
 				if IsUsingWideScreen() then
-					self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Down ] Browse   •   [ 1-5 ] Difficulty   •   [ Tab ] Category   •   [ Left / Right ] Filter   •   [ Esc ] Wheel", sel, total))
+					self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Down ] Browse   •   [ 1-5 ] Difficulty   •   [ Tab ] Category   •   [ Left / Right ] Tabs   •   [ Esc ] Wheel", sel, total))
 				else
-					self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Dn ] Browse   •   [ 1-5 ] Diff   •   [ Tab ] Cat   •   [ L / R ] Filter   •   [ Esc ] Wheel", sel, total))
+					self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Dn ] Browse   •   [ 1-5 ] Diff   •   [ Tab ] Cat   •   [ L / R ] Tabs   •   [ Esc ] Wheel", sel, total))
 				end
 				self:diffuse(Color.White)
 			end

@@ -119,6 +119,7 @@ local function CycleSubChip(delta)
 	if activeSubChipIdx < 1 then activeSubChipIdx = #subChips end
 	if activeSubChipIdx > #subChips then activeSubChipIdx = 1 end
 
+	MESSAGEMAN:Broadcast("CategorySubChipCycled", { dir = delta })
 	RefreshCategorySongs()
 end
 
