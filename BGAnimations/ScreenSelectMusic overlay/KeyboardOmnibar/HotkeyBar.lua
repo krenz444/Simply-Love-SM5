@@ -53,8 +53,8 @@ local af = Def.ActorFrame {
 -- Dual-Action Header Dock (Search & Category Navigation)
 -- Positioned at y = 16, centered perfectly in the header between timer and ITG logo.
 -- -------------------------------------------------------------
-local topPillX = IsUsingWideScreen() and (_screen.cx + 165) or (_screen.cx + 120)
-local topPillW = IsUsingWideScreen() and 264 or 180
+local topPillX = IsUsingWideScreen() and (_screen.cx + 181) or (_screen.cx + 132)
+local topPillW = IsUsingWideScreen() and 236 or 176
 local topPillH = 24
 
 local topPill = Def.ActorFrame {
@@ -100,8 +100,8 @@ local topPill = Def.ActorFrame {
 		-- Keycap solid background pill
 		Def.Quad {
 			InitCommand = function(self)
-				self:x(-28)
-				self:zoomto(28, 16)
+				self:x(-24)
+				self:zoomto(26, 16)
 				self:diffuse(GetCurrentColor())
 			end,
 			ColorSelectedMessageCommand = function(self)
@@ -112,7 +112,7 @@ local topPill = Def.ActorFrame {
 		-- Keycap text inside badge
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:x(-28)
+				self:x(-24)
 				self:zoom(0.55)
 				self:diffuse(color("0.05, 0.05, 0.08, 1.0"))
 				self:shadowlength(0)
@@ -123,8 +123,8 @@ local topPill = Def.ActorFrame {
 		-- Action label
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:x(12)
-				self:zoom(0.60)
+				self:x(10)
+				self:zoom(0.56)
 				self:diffuse(Color.White)
 				self:shadowlength(0)
 				self:settext("Search")
@@ -142,8 +142,8 @@ local topPill = Def.ActorFrame {
 		-- Keycap solid background pill
 		Def.Quad {
 			InitCommand = function(self)
-				self:x(-38)
-				self:zoomto(32, 16)
+				self:x(-34)
+				self:zoomto(30, 16)
 				self:diffuse(GetCurrentColor())
 			end,
 			ColorSelectedMessageCommand = function(self)
@@ -154,7 +154,7 @@ local topPill = Def.ActorFrame {
 		-- Keycap text inside badge
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:x(-38)
+				self:x(-34)
 				self:zoom(0.55)
 				self:diffuse(color("0.05, 0.05, 0.08, 1.0"))
 				self:shadowlength(0)
@@ -165,8 +165,8 @@ local topPill = Def.ActorFrame {
 		-- Action label
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:x(10)
-				self:zoom(0.60)
+				self:x(12)
+				self:zoom(0.56)
 				self:diffuse(Color.White)
 				self:shadowlength(0)
 				self:settext("Categories")

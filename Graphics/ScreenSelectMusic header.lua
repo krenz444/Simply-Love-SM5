@@ -54,6 +54,9 @@ end
 -- generic header elements (background Def.Quad, left-aligned screen name)
 af[#af+1] = LoadActor( THEME:GetPathG("", "_header.lua") )
 
+-- keyboard mode & search hotkey dock in header (positioned right of timer, above header quad)
+af[#af+1] = LoadActor( THEME:GetPathB("ScreenSelectMusic", "overlay/KeyboardOmnibar/HotkeyBar.lua") )
+
 -- centered text
 -- session timer in EventMode
 if PREFSMAN:GetPreference("EventMode") then

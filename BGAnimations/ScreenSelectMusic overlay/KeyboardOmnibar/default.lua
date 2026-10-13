@@ -3,7 +3,6 @@
 
 local SongSearchEngine = LoadActor("SongSearchEngine.lua")
 local KeyboardLayout = LoadActor("KeyboardLayout.lua")
-local HotkeyBar = LoadActor("HotkeyBar.lua")
 
 -- State variables
 local isOpen = false
@@ -855,9 +854,6 @@ local af = Def.ActorFrame {
 		end
 	end,
 }
-
--- Add Persistent Hotkey Bar at bottom
-af[#af + 1] = HotkeyBar
 
 -- Omnibar Modal Window
 local modal = Def.ActorFrame {
