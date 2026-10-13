@@ -23,6 +23,12 @@ local maxRows = 14
 local isShiftHeld = false
 local isCtrlHeld = false
 
+-- Tab Repeat Pacing & Debounce
+local lastTabTime = 0
+local tabRepeatCount = 0
+local TAB_INITIAL_DELAY = 0.40   -- Seconds before first repeat when held
+local TAB_REPEAT_INTERVAL = 0.28  -- Seconds between subsequent repeats when held
+
 local categories = CategoryEngine.GetCategories()
 
 -- Forward declarations
@@ -197,6 +203,8 @@ end
 -- Enter Keyboard Mode (Hide native wheel, show category navigation)
 EnterKeyboardMode = function()
 	isNavActive = true
+	lastTabTime = GetTimeSinceStart()
+	tabRepeatCount = 0
 	if SL and SL.Global then SL.Global.CategoryNavActive = true end
 	for pn in ivalues(PlayerNumber) do
 		SCREENMAN:set_input_redirected(pn, true)
@@ -240,6 +248,8 @@ end
 -- Exit Keyboard Mode (Hide category navigation, restore normal scroll wheel)
 ExitKeyboardMode = function()
 	isNavActive = false
+	lastTabTime = 0
+	tabRepeatCount = 0
 	if SL and SL.Global then SL.Global.CategoryNavActive = false end
 	for pn in ivalues(PlayerNumber) do
 		SCREENMAN:set_input_redirected(pn, false)
@@ -332,6 +342,54 @@ local af = Def.ActorFrame {
 			Trace("ESCAPE_TEST: Flag detected, starting escape test sequence")
 			self:sleep(1.0):queuecommand("TestEscapeEnterKey")
 		end
+
+		if FILEMAN:DoesFileExist("Save/run_tab_test.flag") then
+			Trace("TAB_TEST: Flag detected, starting tab repeat test sequence")
+			self:sleep(1.0):queuecommand("TestTabRepeat")
+		end
+	end,
+	TestTabRepeatCommand = function(self)
+		Trace("TAB_TEST_STEP: start")
+		EnterKeyboardMode()
+		local startCat = activeCategoryIdx
+		Trace("TAB_TEST: initial cat = " .. tostring(startCat))
+
+		-- 1. FirstPress should advance category immediately
+		CategoryInputHandler({ type = "InputEventType_FirstPress", DeviceInput = { button = "DeviceButton_tab" } })
+		local catAfter1 = activeCategoryIdx
+		Trace("TAB_TEST: after FirstPress = " .. tostring(catAfter1))
+
+		-- 2. Immediate Repeat (simulating high-speed hardware repeat) should be IGNORED
+		CategoryInputHandler({ type = "InputEventType_Repeat", DeviceInput = { button = "DeviceButton_tab" } })
+		local catAfterImmediateRepeat = activeCategoryIdx
+		Trace("TAB_TEST: after immediate Repeat = " .. tostring(catAfterImmediateRepeat))
+
+		-- Queue next step after 0.5s to test delayed repeat
+		self:sleep(0.5):queuecommand("TestTabDelayedRepeat")
+	end,
+	TestTabDelayedRepeatCommand = function(self)
+		-- 3. Repeat after 0.5s (>= 0.40s) should advance category
+		CategoryInputHandler({ type = "InputEventType_Repeat", DeviceInput = { button = "DeviceButton_tab" } })
+		local catAfterDelayedRepeat = activeCategoryIdx
+		Trace("TAB_TEST: after 0.5s Repeat = " .. tostring(catAfterDelayedRepeat))
+
+		-- 4. Immediate repeat again should be ignored
+		CategoryInputHandler({ type = "InputEventType_Repeat", DeviceInput = { button = "DeviceButton_tab" } })
+		local catAfterSubsequentFastRepeat = activeCategoryIdx
+		Trace("TAB_TEST: after subsequent fast Repeat = " .. tostring(catAfterSubsequentFastRepeat))
+
+		-- Queue finish after 0.35s
+		self:sleep(0.35):queuecommand("TestTabRepeatInterval")
+	end,
+	TestTabRepeatIntervalCommand = function(self)
+		-- 5. Repeat after 0.35s (>= 0.28s) should advance category
+		CategoryInputHandler({ type = "InputEventType_Repeat", DeviceInput = { button = "DeviceButton_tab" } })
+		local catAfterIntervalRepeat = activeCategoryIdx
+		Trace("TAB_TEST: after interval Repeat = " .. tostring(catAfterIntervalRepeat))
+
+		-- 6. Release resets state
+		CategoryInputHandler({ type = "InputEventType_Release", DeviceInput = { button = "DeviceButton_tab" } })
+		Trace("TAB_TEST_STEP: finished")
 	end,
 	TestEscapeEnterKeyCommand = function(self)
 		EnterKeyboardMode()
@@ -503,6 +561,15 @@ CategoryInputHandler = function(event)
 		return false
 	end
 
+	-- Key Release Tracking (resets hold/repeat state so subsequent taps respond immediately)
+	if eventType == "InputEventType_Release" then
+		if btn == "DeviceButton_tab" or event.GameButton == "Select" then
+			lastTabTime = 0
+			tabRepeatCount = 0
+		end
+		return false
+	end
+
 	local isDown = (eventType == "InputEventType_FirstPress" or eventType == "InputEventType_Repeat")
 	if not isDown then return false end
 
@@ -512,7 +579,12 @@ CategoryInputHandler = function(event)
 	if not isNavActive then
 		-- Check if player pressed Tab, F3, or Ctrl+K to switch into Keyboard Mode!
 		if btn == "DeviceButton_tab" or btn == "DeviceButton_f3" or (isCtrlHeld and (btn == "DeviceButton_k" or btn == "DeviceButton_K")) then
-			EnterKeyboardMode()
+			if eventType == "InputEventType_FirstPress" then
+				lastTabTime = GetTimeSinceStart()
+				tabRepeatCount = 0
+				EnterKeyboardMode()
+				return true
+			end
 			return true
 		end
 
@@ -553,11 +625,33 @@ CategoryInputHandler = function(event)
 		return true
 	end
 
-	-- Tab: Cycle Category Tabs
+	-- Tab: Cycle Category Tabs (paced repeat rate limiting)
 	if btn == "DeviceButton_tab" or event.GameButton == "Select" then
-		CycleCategory(isShiftHeld and -1 or 1)
-		SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
-		return true
+		local now = GetTimeSinceStart()
+		if eventType == "InputEventType_FirstPress" then
+			lastTabTime = now
+			tabRepeatCount = 0
+			CycleCategory(isShiftHeld and -1 or 1)
+			SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
+			return true
+		elseif eventType == "InputEventType_Repeat" then
+			if tabRepeatCount == 0 then
+				if (now - lastTabTime) >= TAB_INITIAL_DELAY then
+					lastTabTime = now
+					tabRepeatCount = 1
+					CycleCategory(isShiftHeld and -1 or 1)
+					SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
+				end
+			else
+				if (now - lastTabTime) >= TAB_REPEAT_INTERVAL then
+					lastTabTime = now
+					tabRepeatCount = tabRepeatCount + 1
+					CycleCategory(isShiftHeld and -1 or 1)
+					SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
+				end
+			end
+			return true
+		end
 	end
 
 	-- [ / ]: Cycle Sub-Chips
