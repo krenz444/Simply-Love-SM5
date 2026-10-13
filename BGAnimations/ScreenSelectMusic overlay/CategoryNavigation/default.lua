@@ -18,7 +18,7 @@ local activeSubChipIdx = 1
 local currentSongs = {}
 local selectedSongIdx = 1
 local topVisibleIdx = 1
-local maxRows = 11
+local maxRows = 13
 
 local isShiftHeld = false
 local isCtrlHeld = false
@@ -363,6 +363,7 @@ local af = Def.ActorFrame {
 		end
 		isNavActive = false
 		if SL and SL.Global then SL.Global.CategoryNavActive = false end
+		MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
 	end,
 	ShowOmnibarMessageCommand = function(self)
 		self:visible(false)

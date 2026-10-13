@@ -1,14 +1,14 @@
 -- CategorySongWheel.lua
 -- Virtual, high-performance song scroller for the active category in CategoryNavigation.
--- Renders 8 high-density cards with live metadata, difficulty badges, and scrollbar.
+-- Renders 13 high-density cards with live metadata, difficulty badges, and scrollbar.
 
 local CategorySongWheel = {}
 
 local wheelX = IsUsingWideScreen() and (_screen.cx + _screen.w/4) or (_screen.cx + 160)
 local wheelW = IsUsingWideScreen() and 396 or 300
-local maxRows = 11
-local rowHeight = 31
-local startY = 84
+local maxRows = 13
+local rowHeight = 30
+local startY = 68
 _G.CategorySongWheel_MaxRows = maxRows
 
 -- Format helpers
@@ -72,7 +72,7 @@ local af = Def.ActorFrame {
 }
 
 -- -------------------------------------------------------------
--- Song Cards (1 through 11)
+-- Song Cards (1 through 13)
 -- -------------------------------------------------------------
 for r = 1, maxRows do
 	local cardY = startY + (r - 1) * rowHeight
@@ -113,26 +113,37 @@ for r = 1, maxRows do
 			if isSelected then
 				cardBg:diffuse(color("0.13, 0.17, 0.26, 0.98"))
 				titleText:diffuse(Color.White)
-				titleText:zoom(0.52)
+				titleText:zoom(0.50)
 				subText:diffuse(color("#ccddee"))
+				subText:zoom(0.36)
 				bpmLengthText:diffuse(Color.White)
-				bpmLengthText:zoom(0.40)
+				bpmLengthText:zoom(0.38)
 			else
 				cardBg:diffuse(color("0.06, 0.08, 0.12, 0.90"))
 				titleText:diffuse(color("#c8d6e5"))
-				titleText:zoom(0.52)
+				titleText:zoom(0.50)
 				subText:diffuse(color("#778899"))
+				subText:zoom(0.36)
 				bpmLengthText:diffuse(color("#778899"))
-				bpmLengthText:zoom(0.40)
+				bpmLengthText:zoom(0.38)
 			end
 
 			titleText:settext(entry.title or "")
-			subText:settext((entry.artist or "") .. "  •  " .. (entry.group or ""))
+
+			local artist = entry.artist or ""
+			local group = entry.group or ""
+			if #artist > 0 and #group > 0 then
+				subText:settext(artist .. "    •    " .. group)
+			elseif #artist > 0 then
+				subText:settext(artist)
+			else
+				subText:settext(group)
+			end
 
 			local bpmStr = FormatBPM(entry.bpms)
 			local lenStr = FormatLength(entry.length)
 			if #bpmStr > 0 and #lenStr > 0 then
-				bpmLengthText:settext(bpmStr .. " BPM  " .. lenStr)
+				bpmLengthText:settext(bpmStr .. " BPM    " .. lenStr)
 			elseif #bpmStr > 0 then
 				bpmLengthText:settext(bpmStr .. " BPM")
 			else
@@ -148,7 +159,7 @@ for r = 1, maxRows do
 			favBorder:visible(isFav)
 		end,
 
-		-- Card backdrop (compact 29px height)
+		-- Card backdrop (compact 28px height)
 		Def.Quad {
 			Name = "CardBg",
 			InitCommand = function(self)
@@ -188,7 +199,7 @@ for r = 1, maxRows do
 		Def.Quad {
 			Name = "FavBadgeBorder",
 			InitCommand = function(self)
-				self:x(-wheelW / 2 + 20)
+				self:x(-wheelW / 2 + 18)
 				self:zoomto(28, 24)
 				self:diffuse(color("#ffd700"))
 				self:visible(false)
@@ -199,61 +210,61 @@ for r = 1, maxRows do
 		Def.Quad {
 			Name = "MeterBadgeBg",
 			InitCommand = function(self)
-				self:x(-wheelW / 2 + 20)
+				self:x(-wheelW / 2 + 18)
 				self:zoomto(24, 20)
 				self:diffuse(color("0.15, 0.18, 0.26, 1.0"))
 			end,
 		},
 
-		-- Difficulty Meter Text (zoom 0.50)
+		-- Difficulty Meter Text (zoom 0.48)
 		LoadFont("Common Normal") .. {
 			Name = "MeterText",
 			InitCommand = function(self)
-				self:x(-wheelW / 2 + 20)
-				self:zoom(0.50)
+				self:x(-wheelW / 2 + 18)
+				self:zoom(0.48)
 				self:shadowlength(0)
 				self:diffuse(Color.White)
 				self:settext("")
 			end,
 		},
 
-		-- Song Title (zoom 0.52)
+		-- Song Title (zoom 0.50)
 		LoadFont("Common Normal") .. {
 			Name = "TitleText",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 38)
 				self:y(-5)
 				self:horizalign(left)
-				self:zoom(0.52)
-				self:maxwidth((wheelW - 145) / 0.52)
+				self:zoom(0.50)
+				self:maxwidth((wheelW - 145) / 0.50)
 				self:diffuse(Color.White)
 				self:shadowlength(0)
 				self:settext("")
 			end,
 		},
 
-		-- Artist & Pack Subtitle (zoom 0.38)
+		-- Artist & Pack Subtitle (zoom 0.36)
 		LoadFont("Common Normal") .. {
 			Name = "SubText",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 38)
 				self:y(6)
 				self:horizalign(left)
-				self:zoom(0.38)
-				self:maxwidth((wheelW - 145) / 0.38)
-				self:diffuse(color("#8899aa"))
+				self:zoom(0.36)
+				self:maxwidth((wheelW - 145) / 0.36)
+				self:diffuse(color("#778899"))
 				self:shadowlength(0)
 				self:settext("")
 			end,
 		},
 
-		-- BPM & Length (Right aligned, zoom 0.40)
+		-- BPM & Length (Right aligned, zoom 0.38)
 		LoadFont("Common Normal") .. {
 			Name = "BpmLengthText",
 			InitCommand = function(self)
 				self:x(wheelW / 2 - 8)
 				self:horizalign(right)
-				self:zoom(0.40)
+				self:zoom(0.38)
 				self:diffuse(color("#778899"))
 				self:shadowlength(0)
 				self:settext("")
@@ -321,9 +332,9 @@ local emptyStateAF = Def.ActorFrame {
 			local catId = params and params.categoryId or ""
 			local sub = self:GetChild("EmptySubtitle")
 			if catId == "favorites" then
-				sub:settext("You haven't added any favorites yet.\nPress [Ctrl+D] or pad Select code to favorite any song!")
+				sub:settext("You haven't added any favorites yet.\nPress [ Ctrl + D ] to favorite any song!")
 			else
-				sub:settext("No songs match this category filter.\nPress [Left / Right] or [Tab] to browse other categories.")
+				sub:settext("No songs match this category filter.\nPress [ Left / Right ] or [ Tab ] to browse other categories.")
 			end
 		else
 			self:visible(false)
@@ -371,41 +382,33 @@ local emptyStateAF = Def.ActorFrame {
 af[#af + 1] = emptyStateAF
 
 -- -------------------------------------------------------------
--- Streamlined Unified Control HUD (y = 430, height = 24px)
--- Consolidates all primary actions & hotkeys into a single ultra-sleek dock
+-- Streamlined Unified Control HUD in Footer Element
+-- Relocated directly into the bottom footer element replacing Event Mode / Credits
 -- -------------------------------------------------------------
 local hudAF = Def.ActorFrame {
 	Name = "UnifiedControlHUD",
 	InitCommand = function(self)
-		self:y(430)
+		self:xy(_screen.cx - wheelX, 462)
 	end,
 
-	-- Border hairline
+	-- Footer Quad background
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(wheelW + 2, 24)
-			self:diffuse(color("0.16, 0.20, 0.28, 0.85"))
+			self:zoomto(_screen.w, 20)
+			self:diffuse(color("0.05, 0.07, 0.11, 0.96"))
 		end,
 	},
 
-	-- Background quad
-	Def.Quad {
-		InitCommand = function(self)
-			self:zoomto(wheelW, 22)
-			self:diffuse(color("0.07, 0.09, 0.14, 0.96"))
-		end,
-	},
-
-	-- Top accent hairline
+	-- Top accent hairline (1px at y = -10 with theme color alpha 0.65)
 	Def.Quad {
 		Name = "HudTopAccent",
 		InitCommand = function(self)
 			self:y(-10)
-			self:zoomto(wheelW, 1.5)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.8)
+			self:zoomto(_screen.w, 1)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.65)
 		end,
 		ColorSelectedMessageCommand = function(self)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.8)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.65)
 		end,
 	},
 
@@ -413,10 +416,12 @@ local hudAF = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		Name = "UnifiedControlText",
 		InitCommand = function(self)
+			self:y(0)
+			self:horizalign(center)
 			self:zoom(0.38)
 			self:shadowlength(0)
 			self:diffuse(Color.White)
-			self:maxwidth((wheelW - 14) / 0.38)
+			self:maxwidth((_screen.w - 40) / 0.38)
 			self:settext("")
 		end,
 		UpdateCategoryUIMessageCommand = function(self, params)
@@ -424,13 +429,17 @@ local hudAF = Def.ActorFrame {
 			local total = #params.songs
 			local sel = params.selectedIdx or 1
 			if total == 0 then
-				self:settext("0 Songs  •  [Tab] Category  •  [Left/Right] Filter  •  [Esc] Wheel Mode")
+				if IsUsingWideScreen() then
+					self:settext("0 Songs    •    [ Tab ]  Category    •    [ Left / Right ]  Filter    •    [ Esc ]  Wheel")
+				else
+					self:settext("0 Songs    •    [ Tab ]  Cat    •    [ L / R ]  Filter    •    [ Esc ]  Wheel")
+				end
 				self:diffuse(color("#ffaa66"))
 			else
 				if IsUsingWideScreen() then
-					self:settext(string.format("Song %d of %d  •  [Enter] Play  •  [Up/Down] Browse  •  [1-5] Diff  •  [Tab] Category  •  [Left/Right] Filter  •  [Esc] Wheel", sel, total))
+					self:settext(string.format("Song %d of %d    •    [ Enter ]  Play    •    [ Up / Down ]  Browse    •    [ 1 - 5 ]  Difficulty    •    [ Tab ]  Category    •    [ Left / Right ]  Filter    •    [ Esc ]  Wheel", sel, total))
 				else
-					self:settext(string.format("Song %d/%d  •  [Enter] Play  •  [Up/Dn] Browse  •  [1-5] Diff  •  [Tab] Cat  •  [L/R] Filter  •  [Esc] Wheel", sel, total))
+					self:settext(string.format("Song %d of %d    •    [ Enter ]  Play    •    [ Up / Dn ]  Browse    •    [ 1 - 5 ]  Diff    •    [ Tab ]  Cat    •    [ L / R ]  Filter    •    [ Esc ]  Wheel", sel, total))
 				end
 				self:diffuse(Color.White)
 			end

@@ -21,25 +21,25 @@ local af = Def.ActorFrame {
 }
 
 -- -------------------------------------------------------------
--- Tier 1: Top Category Ribbon Tabs (y = 38, height = 20)
+-- Tier 1: Top Category Ribbon Tabs (y = 33, height = 16)
 -- -------------------------------------------------------------
 local tabContainer = Def.ActorFrame {
 	Name = "Tier1Tabs",
 	InitCommand = function(self)
-		self:y(38)
+		self:y(33)
 	end,
 
 	-- Border hairline
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW + 2, 22)
+			self:zoomto(ribbonW + 2, 18)
 			self:diffuse(color("0.16, 0.20, 0.28, 0.85"))
 		end,
 	},
 	-- Background pill tray
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW, 20)
+			self:zoomto(ribbonW, 16)
 			self:diffuse(color("0.07, 0.09, 0.13, 0.96"))
 		end,
 	},
@@ -62,7 +62,7 @@ for i = 1, numTabs do
 		Def.Quad {
 			Name = "TabHighlight",
 			InitCommand = function(self)
-				self:zoomto(tabSpacing - 4, 16)
+				self:zoomto(tabSpacing - 4, 13)
 				self:visible(i == 1)
 				self:diffuse(GetCurrentColor()):diffusealpha(0.35)
 			end,
@@ -80,7 +80,7 @@ for i = 1, numTabs do
 		Def.Quad {
 			Name = "TabUnderline",
 			InitCommand = function(self)
-				self:y(9)
+				self:y(7)
 				self:zoomto(tabSpacing - 4, 2)
 				self:visible(i == 1)
 				self:diffuse(GetCurrentColor())
@@ -100,7 +100,7 @@ for i = 1, numTabs do
 			Name = "TabLabel",
 			InitCommand = function(self)
 				self:y(-1)
-				self:zoom(0.46)
+				self:zoom(0.40)
 				self:shadowlength(0)
 				self:settext(cat.name)
 				if i == 1 then
@@ -127,18 +127,18 @@ end
 af[#af + 1] = tabContainer
 
 -- -------------------------------------------------------------
--- Tier 2: Sub-Category Filter Chips Tray (y = 60, height = 18)
+-- Tier 2: Sub-Category Filter Chips Tray (y = 49, height = 14)
 -- -------------------------------------------------------------
 local chipsContainer = Def.ActorFrame {
 	Name = "Tier2Chips",
 	InitCommand = function(self)
-		self:y(60)
+		self:y(49)
 	end,
 
 	-- Border hairline
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW + 2, 20)
+			self:zoomto(ribbonW + 2, 16)
 			self:diffuse(color("0.14, 0.18, 0.25, 0.7"))
 		end,
 	},
@@ -146,7 +146,7 @@ local chipsContainer = Def.ActorFrame {
 	-- Background tray
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW, 18)
+			self:zoomto(ribbonW, 14)
 			self:diffuse(color("0.05, 0.07, 0.11, 0.92"))
 		end,
 	},
@@ -155,9 +155,9 @@ local chipsContainer = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		Name = "ChipsText",
 		InitCommand = function(self)
-			self:zoom(0.40)
+			self:zoom(0.38)
 			self:shadowlength(0)
-			self:maxwidth((ribbonW - 10) / 0.40)
+			self:maxwidth((ribbonW - 10) / 0.38)
 			self:diffuse(color("#ccddee"))
 			self:settext("")
 		end,
@@ -168,10 +168,12 @@ local chipsContainer = Def.ActorFrame {
 			local activeIdx = params.subChipIdx or 1
 			local totalSongs = params.totalSongs or 0
 
-			if #subChips > 4 then
+			if #subChips == 0 then
+				self:settext("")
+			elseif #subChips > 4 then
 				local curChip = subChips[activeIdx]
 				local curLabel = curChip and curChip.label or ""
-				self:settext(string.format("< Left   [%d/%d] %s (%d songs)   Right >", activeIdx, #subChips, curLabel, totalSongs))
+				self:settext(string.format("<  Left    [ %d/%d ]  %s (%d songs)    Right  >", activeIdx, #subChips, curLabel, totalSongs))
 			else
 				local parts = {}
 				for idx, chip in ipairs(subChips) do
@@ -181,7 +183,7 @@ local chipsContainer = Def.ActorFrame {
 						parts[#parts + 1] = chip.label
 					end
 				end
-				local str = "< Left   " .. table.concat(parts, "  •  ") .. "   Right >"
+				local str = "<  Left    " .. table.concat(parts, "    •    ") .. "    Right  >"
 				self:settext(str)
 			end
 		end,

@@ -1,6 +1,8 @@
 -- This is mostly copy/pasted directly from SM5's _fallback theme with
 -- very minor modifications.
 
+local isCatNavActive = false
+
 local t = Def.ActorFrame{
 	InitCommand=function(self)
 		-- In case we loaded the theme with SRPG10 and had Rainbow Mode enabled, disable it.
@@ -8,7 +10,13 @@ local t = Def.ActorFrame{
 			ThemePrefs.Set("RainbowMode", false)
 			ThemePrefs.Save()
 		end
-	end
+	end,
+	CategoryNavigationModeChangedMessageCommand=function(self, params)
+		if params and params.active ~= nil then
+			isCatNavActive = params.active
+		end
+		self:playcommand("Refresh")
+	end,
 }
 
 -- -----------------------------------------------------------------------
@@ -21,6 +29,12 @@ local function CreditsText( player )
 			ActorUtil.LoadAllCommandsAndSetXY(self,Var "LoadingScreen")
 		end,
 		VisualStyleSelectedMessageCommand=function(self) self:playcommand("UpdateVisible") end,
+		CategoryNavigationModeChangedMessageCommand=function(self, params)
+			if params and params.active ~= nil then
+				isCatNavActive = params.active
+			end
+			self:playcommand("UpdateVisible")
+		end,
 		UpdateTextCommand=function(self)
 			-- this feels like a holdover from SM3.9 that just never got updated
 			local str = ScreenSystemLayerHelpers.GetCreditsMessage(player)
@@ -34,10 +48,19 @@ local function CreditsText( player )
 		SetCreditsTextMessageCommand=function(self, params)
 			if params.pn == ToEnumShortString(player) then
 				self:settext(params.username)
-				self:visible(true)
+				if isCatNavActive or (SL and SL.Global and SL.Global.CategoryNavActive) then
+					self:visible(false)
+				else
+					self:visible(true)
+				end
 			end
 		end,
 		UpdateVisibleCommand=function(self)
+			if isCatNavActive or (SL and SL.Global and SL.Global.CategoryNavActive) then
+				self:visible(false)
+				return
+			end
+
 			local screen = SCREENMAN:GetTopScreen()
 			local bShow = true
 
@@ -138,8 +161,19 @@ t[#t+1] = LoadFont("Common Footer")..{
 	CoinModeChangedMessageCommand=function(self) self:playcommand("Refresh") end,
 	CoinsChangedMessageCommand=function(self) self:playcommand("Refresh") end,
 	VisualStyleSelectedMessageCommand=function(self) self:playcommand("Refresh") end,
+	CategoryNavigationModeChangedMessageCommand=function(self, params)
+		if params and params.active ~= nil then
+			isCatNavActive = params.active
+		end
+		self:playcommand("Refresh")
+	end,
 
 	RefreshCommand=function(self)
+		if isCatNavActive or (SL and SL.Global and SL.Global.CategoryNavActive) then
+			self:visible(false)
+			return
+		end
+
 		local screen = SCREENMAN:GetTopScreen()
 
 		-- if this screen's Metric for ShowCreditDisplay=false, then hide this BitmapText actor
