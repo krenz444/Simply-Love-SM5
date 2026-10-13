@@ -198,6 +198,11 @@ end
 EnterKeyboardMode = function()
 	isNavActive = true
 	if SL and SL.Global then SL.Global.CategoryNavActive = true end
+	for pn in ivalues(PlayerNumber) do
+		SCREENMAN:set_input_redirected(pn, true)
+	end
+	Trace("CATEGORY_NAV: EnterKeyboardMode - input redirected for all players")
+
 	local top = SCREENMAN:GetTopScreen()
 	if top and top.GetMusicWheel then
 		local wheel = top:GetMusicWheel()
@@ -236,6 +241,11 @@ end
 ExitKeyboardMode = function()
 	isNavActive = false
 	if SL and SL.Global then SL.Global.CategoryNavActive = false end
+	for pn in ivalues(PlayerNumber) do
+		SCREENMAN:set_input_redirected(pn, false)
+	end
+	Trace("CATEGORY_NAV: ExitKeyboardMode - input un-redirected, normal wheel restored")
+
 	if rootActor then
 		rootActor:visible(false)
 	end
@@ -283,6 +293,9 @@ local af = Def.ActorFrame {
 		MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = isNavActive })
 
 		if startInCatNav then
+			for pn in ivalues(PlayerNumber) do
+				SCREENMAN:set_input_redirected(pn, true)
+			end
 			if top and top.GetMusicWheel then
 				local wheel = top:GetMusicWheel()
 				if wheel then
@@ -292,6 +305,9 @@ local af = Def.ActorFrame {
 			end
 			RefreshCategorySongs()
 		else
+			for pn in ivalues(PlayerNumber) do
+				SCREENMAN:set_input_redirected(pn, false)
+			end
 			-- Ensure normal wheel is visible and active
 			if top and top.GetMusicWheel then
 				local wheel = top:GetMusicWheel()
@@ -311,6 +327,15 @@ local af = Def.ActorFrame {
 			Trace("SWITCH_TEST: Flag detected, starting mode switch test sequence")
 			self:sleep(1.0):queuecommand("TestSwitchInitial")
 		end
+
+		if FILEMAN:DoesFileExist("Save/run_escape_test.flag") then
+			Trace("ESCAPE_TEST: Flag detected, starting escape test sequence")
+			self:sleep(1.0):queuecommand("TestEscapeEnterKey")
+		end
+	end,
+	TestEscapeEnterKeyCommand = function(self)
+		EnterKeyboardMode()
+		Trace("ESCAPE_TEST_STEP: keyboard_ready")
 	end,
 	TestSwitchInitialCommand = function(self)
 		Trace("SWITCH_TEST_STEP: wheel_initial")
@@ -322,7 +347,10 @@ local af = Def.ActorFrame {
 		self:sleep(1.5):queuecommand("TestSwitchExitKey")
 	end,
 	TestSwitchExitKeyCommand = function(self)
-		ExitKeyboardMode()
+		CategoryInputHandler({
+			type = "InputEventType_FirstPress",
+			DeviceInput = { button = "DeviceButton_escape" }
+		})
 		Trace("SWITCH_TEST_STEP: wheel_returned")
 		self:sleep(1.5):queuecommand("TestSwitchDone")
 	end,
@@ -357,6 +385,9 @@ local af = Def.ActorFrame {
 		Trace("CATEGORY_TEST_STEP: finished")
 	end,
 	OffCommand = function(self)
+		for pn in ivalues(PlayerNumber) do
+			SCREENMAN:set_input_redirected(pn, false)
+		end
 		local top = SCREENMAN:GetTopScreen()
 		if top and top.RemoveInputCallback then
 			top:RemoveInputCallback(CategoryInputHandler)
@@ -377,6 +408,9 @@ local af = Def.ActorFrame {
 			self:visible(true)
 			isNavActive = true
 			if SL and SL.Global then SL.Global.CategoryNavActive = true end
+			for pn in ivalues(PlayerNumber) do
+				SCREENMAN:set_input_redirected(pn, true)
+			end
 			local curSong = GAMESTATE:GetCurrentSong()
 			if curSong then
 				local found = false
@@ -420,6 +454,9 @@ local af = Def.ActorFrame {
 			self:visible(false)
 			isNavActive = false
 			if SL and SL.Global then SL.Global.CategoryNavActive = false end
+			for pn in ivalues(PlayerNumber) do
+				SCREENMAN:set_input_redirected(pn, false)
+			end
 			MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
 		end
 	end,
@@ -491,6 +528,7 @@ CategoryInputHandler = function(event)
 
 	-- Escape, Back, F3, or Ctrl+K: Switch BACK to Normal Scroll Wheel at any time!
 	if btn == "DeviceButton_escape" or btn == "DeviceButton_f3" or (isCtrlHeld and (btn == "DeviceButton_k" or btn == "DeviceButton_K")) or event.GameButton == "Back" then
+		Trace("CATEGORY_NAV: Escape/Back pressed - exiting to wheel cleanly without prompt")
 		ExitKeyboardMode()
 		return true
 	end
@@ -582,9 +620,18 @@ CategoryInputHandler = function(event)
 	end
 
 	-- Enter / Start:
-	-- Pass through to ScreenSelectMusic to begin the song or open player options!
+	-- Un-redirect input and begin the song or transition to player options!
 	if btn == "DeviceButton_enter" or event.GameButton == "Start" then
-		return false
+		for pn in ivalues(PlayerNumber) do
+			SCREENMAN:set_input_redirected(pn, false)
+		end
+		local top = SCREENMAN:GetTopScreen()
+		if top and top.StartTransitioningScreen then
+			SOUND:PlayOnce(THEME:GetPathS("Common", "start"))
+			top:StartTransitioningScreen("SM_GoToNextScreen")
+			return true
+		end
+		return true
 	end
 
 	-- All other keys (like A-Z letters for instant type-to-search) pass through
