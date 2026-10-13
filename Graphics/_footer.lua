@@ -5,8 +5,7 @@ local light = {0.65,0.65,0.65,1}
 return Def.Quad{
 	Name="Footer",
 	InitCommand=function(self)
-		local h = (SL and SL.Global and SL.Global.CategoryNavActive) and 24 or 32
-		self:draworder(90):zoomto(_screen.w, h):vertalign(bottom):y(32)
+		self:draworder(90):zoomto(_screen.w, 32):vertalign(bottom):y(32)
 		if ThemePrefs.Get("VisualStyle") == "SRPG10" then
 			self:diffuse(GetCurrentColor(true))
 		elseif DarkUI() then
@@ -16,10 +15,6 @@ return Def.Quad{
 		else
 			self:diffuse(light)
 		end
-	end,
-	CategoryNavigationModeChangedMessageCommand=function(self, params)
-		local h = (params and params.active) and 24 or 32
-		self:zoomto(_screen.w, h):vertalign(bottom):y(32)
 	end,
 	ScreenChangedMessageCommand=function(self)
 		local topscreen = SCREENMAN:GetTopScreen():GetName()

@@ -7,7 +7,7 @@ return Def.ActorFrame{
 
 	Def.Quad{
 		InitCommand=function(self)
-			self:zoomto(_screen.w, 24):vertalign(top):x(_screen.cx)
+			self:zoomto(_screen.w, 32):vertalign(top):x(_screen.cx)
 			if ThemePrefs.Get("VisualStyle") == "SRPG10" then
 				self:diffuse(GetCurrentColor(true))
 			elseif DarkUI() then
@@ -50,7 +50,7 @@ return Def.ActorFrame{
 	LoadFont("Common Header")..{
 		Name="HeaderText",
 		Text=ScreenString("HeaderText"),
-		InitCommand=function(self) self:diffusealpha(0):horizalign(left):xy(10, 12):zoom( SL_WideScale(0.42, 0.48) ) end,
+		InitCommand=function(self) self:diffusealpha(0):horizalign(left):xy(10, 15):zoom( SL_WideScale(0.5,0.6) ) end,
 		OnCommand=function(self) self:sleep(0.1):decelerate(0.33):diffusealpha(1) end,
 		OffCommand=function(self) self:accelerate(0.33):diffusealpha(0) end,
 		SetHeaderTextMessageCommand=function(self, params)

@@ -62,8 +62,8 @@ if PREFSMAN:GetPreference("EventMode") then
 		Name="Session Timer",
 		InitCommand=function(self)
 			bmt_actor = self
-			self:zoom( SL_WideScale(0.18, 0.20) )
-			self:y(10)
+			self:zoom( SL_WideScale(0.3, 0.36) )
+			self:y( SL_WideScale(3.15, 3.5) / self:GetZoom() )
 			self:diffusealpha(0):x(_screen.cx)
 		end,
 		OnCommand=function(self)
@@ -78,8 +78,8 @@ else
 		Name="Stage Number",
 		Text=SSM_Header_StageText(),
 		InitCommand=function(self)
-			self:zoom( SL_WideScale(0.42, 0.48) )
-			self:y(12)
+			self:zoom( SL_WideScale(0.5, 0.6) )
+			self:y( SL_WideScale(7.5, 9) / self:GetZoom() )
 			self:diffusealpha(0):x(_screen.cx)
 		end,
 		OnCommand=function(self)
@@ -94,8 +94,8 @@ af[#af+1] = LoadFont("Common Header")..{
 	Name="GameModeText",
 	Text=THEME:GetString("ScreenSelectPlayMode", SL.Global.GameMode),
 	InitCommand=function(self)
-		self:diffusealpha(0):halign(1):y(12)
-		self:zoom( SL_WideScale(0.42, 0.48) )
+		self:diffusealpha(0):halign(1):y(15)
+		self:zoom( SL_WideScale(0.5, 0.6) )
 
 		-- move the GameMode text further left if MenuTimer is enabled
 		if PREFSMAN:GetPreference("MenuTimer") then
@@ -116,7 +116,7 @@ af[#af+1] = LoadFont("Common Header")..{
 af[#af+1] = LoadActor( THEME:GetPathB("ScreenSelectStyle", "underlay/pad.lua"), {nil, nil, 1, nil} )..{
 	InitCommand=function(self)
 		self:x(_screen.w - (PREFSMAN:GetPreference("MenuTimer") and SL_WideScale(90, 105) or SL_WideScale(35, 41)))
-		self:y( SL_WideScale(16.5, 17.5) ):zoom(0.20)
+		self:y( SL_WideScale(22, 23.5) ):zoom(0.24)
 		self:playcommand("Set", {Player=PLAYER_1})
 	end,
 	PlayerJoinedMessageCommand=function(self, params)
@@ -130,7 +130,7 @@ af[#af+1] = LoadActor( THEME:GetPathB("ScreenSelectStyle", "underlay/pad.lua"), 
 af[#af+1] = LoadActor( THEME:GetPathB("ScreenSelectStyle", "underlay/pad.lua"), {nil, nil, 2, nil} )..{
 	InitCommand=function(self)
 		self:x(_screen.w - (PREFSMAN:GetPreference("MenuTimer") and SL_WideScale(70, 81) or SL_WideScale(15, 17)))
-		self:y( SL_WideScale(16.5, 17.5) ):zoom(0.20)
+		self:y( SL_WideScale(22, 23.5) ):zoom(0.24)
 		self:playcommand("Set", {Player=PLAYER_2})
 	end,
 	PlayerJoinedMessageCommand=function(self, params)

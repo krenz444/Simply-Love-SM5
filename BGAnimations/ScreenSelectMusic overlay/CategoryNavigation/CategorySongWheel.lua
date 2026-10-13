@@ -6,9 +6,9 @@ local CategorySongWheel = {}
 
 local wheelX = IsUsingWideScreen() and (_screen.cx + _screen.w/4) or (_screen.cx + 160)
 local wheelW = IsUsingWideScreen() and 396 or 300
-local maxRows = 13
-local rowHeight = 30
-local startY = 68
+local maxRows = 14
+local rowHeight = 27.2
+local startY = 75
 _G.CategorySongWheel_MaxRows = maxRows
 
 -- Format helpers
@@ -388,31 +388,31 @@ af[#af + 1] = emptyStateAF
 local hudAF = Def.ActorFrame {
 	Name = "UnifiedControlHUD",
 	InitCommand = function(self)
-		self:xy(_screen.cx - wheelX, 462)
+		self:xy(_screen.cx - wheelX, _screen.h - 16)
 	end,
 
-	-- Footer Quad background
+	-- Footer Quad background (fills entire 32px footer bar flush with screen bottom)
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(_screen.w, 20)
-			self:diffuse(color("0.05, 0.07, 0.11, 0.96"))
+			self:zoomto(_screen.w, 32)
+			self:diffuse(color("0.04, 0.04, 0.06, 0.98"))
 		end,
 	},
 
-	-- Top accent hairline (1px at y = -10 with theme color alpha 0.65)
+	-- Top accent hairline (1px at y = -16 with theme color alpha 0.7, flush at y = 448)
 	Def.Quad {
 		Name = "HudTopAccent",
 		InitCommand = function(self)
-			self:y(-10)
+			self:y(-16)
 			self:zoomto(_screen.w, 1)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.65)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.7)
 		end,
 		ColorSelectedMessageCommand = function(self)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.65)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.7)
 		end,
 	},
 
-	-- Unified Hotkeys and Status Text
+	-- Unified Hotkeys and Status Text (centered right in footer bar at y = 464)
 	LoadFont("Common Normal") .. {
 		Name = "UnifiedControlText",
 		InitCommand = function(self)

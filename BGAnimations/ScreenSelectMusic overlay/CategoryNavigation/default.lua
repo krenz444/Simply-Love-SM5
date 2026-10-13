@@ -18,7 +18,7 @@ local activeSubChipIdx = 1
 local currentSongs = {}
 local selectedSongIdx = 1
 local topVisibleIdx = 1
-local maxRows = 13
+local maxRows = 14
 
 local isShiftHeld = false
 local isCtrlHeld = false

@@ -21,26 +21,27 @@ local af = Def.ActorFrame {
 }
 
 -- -------------------------------------------------------------
--- Tier 1: Top Category Ribbon Tabs (y = 33, height = 16)
+-- Tier 1: Top Category Ribbon Tabs (y = 40, height = 16, spans y = 32..48)
 -- -------------------------------------------------------------
 local tabContainer = Def.ActorFrame {
 	Name = "Tier1Tabs",
 	InitCommand = function(self)
-		self:y(33)
+		self:y(40)
 	end,
 
-	-- Border hairline
+	-- Top hairline separator below header
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW + 2, 18)
-			self:diffuse(color("0.16, 0.20, 0.28, 0.85"))
+			self:y(-8)
+			self:zoomto(ribbonW, 1)
+			self:diffuse(color("0.20, 0.20, 0.25, 0.8"))
 		end,
 	},
-	-- Background pill tray
+	-- Background pill tray (cohesive dark theme color, no blue tint)
 	Def.Quad {
 		InitCommand = function(self)
 			self:zoomto(ribbonW, 16)
-			self:diffuse(color("0.07, 0.09, 0.13, 0.96"))
+			self:diffuse(color("0.05, 0.05, 0.07, 0.98"))
 		end,
 	},
 }
@@ -127,27 +128,28 @@ end
 af[#af + 1] = tabContainer
 
 -- -------------------------------------------------------------
--- Tier 2: Sub-Category Filter Chips Tray (y = 49, height = 14)
+-- Tier 2: Sub-Category Filter Chips Tray (y = 55, height = 14, spans y = 48..62)
 -- -------------------------------------------------------------
 local chipsContainer = Def.ActorFrame {
 	Name = "Tier2Chips",
 	InitCommand = function(self)
-		self:y(49)
+		self:y(55)
 	end,
 
-	-- Border hairline
+	-- Top hairline separator between tabs and chips
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW + 2, 16)
-			self:diffuse(color("0.14, 0.18, 0.25, 0.7"))
+			self:y(-7)
+			self:zoomto(ribbonW, 1)
+			self:diffuse(color("0.14, 0.14, 0.18, 0.7"))
 		end,
 	},
 
-	-- Background tray
+	-- Background tray (cohesive dark theme color, no blue tint)
 	Def.Quad {
 		InitCommand = function(self)
 			self:zoomto(ribbonW, 14)
-			self:diffuse(color("0.05, 0.07, 0.11, 0.92"))
+			self:diffuse(color("0.03, 0.03, 0.05, 0.96"))
 		end,
 	},
 
