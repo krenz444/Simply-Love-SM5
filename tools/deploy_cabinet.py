@@ -57,7 +57,7 @@ def main():
     if not a.host:
         sys.exit("--host (or DDR_HOST) is required")
 
-    ssh_opts = []
+    ssh_opts = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no"]
     if a.key:
         ssh_opts += ["-i", a.key]
     if a.host_key_alias:
