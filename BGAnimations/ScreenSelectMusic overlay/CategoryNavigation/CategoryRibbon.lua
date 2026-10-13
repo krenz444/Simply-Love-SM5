@@ -21,12 +21,12 @@ local af = Def.ActorFrame {
 }
 
 -- -------------------------------------------------------------
--- Tier 1: Top Category Ribbon Tabs (y = 34, height = 16, spans y = 26..42)
+-- Tier 1: Top Category Ribbon Tabs (y = 42, height = 16, spans y = 34..50)
 -- -------------------------------------------------------------
 local tabContainer = Def.ActorFrame {
 	Name = "Tier1Tabs",
 	InitCommand = function(self)
-		self:y(34)
+		self:y(42)
 	end,
 
 	-- Top hairline separator below header
@@ -184,13 +184,13 @@ local lastCategoryUIParams = nil
 local chipsContainer = Def.ActorFrame {
 	Name = "Tier2Chips",
 	InitCommand = function(self)
-		self:y(52)
+		self:y(61)
 	end,
 
 	-- Top hairline separator between Tier 1 tabs and Tier 2 tabs
 	Def.Quad {
 		InitCommand = function(self)
-			self:y(-9)
+			self:y(-8)
 			self:zoomto(ribbonW, 1)
 			self:diffuse(color("0.16, 0.16, 0.22, 0.8"))
 		end,
@@ -199,7 +199,7 @@ local chipsContainer = Def.ActorFrame {
 	-- Background tray (dark, cohesive)
 	Def.Quad {
 		InitCommand = function(self)
-			self:zoomto(ribbonW, 18)
+			self:zoomto(ribbonW, 16)
 			self:diffuse(color("0.04, 0.04, 0.06, 0.96"))
 		end,
 	},
@@ -207,7 +207,7 @@ local chipsContainer = Def.ActorFrame {
 	-- Bottom hairline separator before song cards
 	Def.Quad {
 		InitCommand = function(self)
-			self:y(9)
+			self:y(8)
 			self:zoomto(ribbonW, 1)
 			self:diffuse(color("0.16, 0.16, 0.22, 0.8"))
 		end,
@@ -229,14 +229,14 @@ local chipsContainer = Def.ActorFrame {
 		Def.Quad {
 			Name = "KeyBg",
 			InitCommand = function(self)
-				self:zoomto(keyW, 14)
+				self:zoomto(keyW, 13)
 				self:diffuse(color("0.15, 0.18, 0.24, 0.95"))
 			end,
 		},
 		Def.Quad {
 			Name = "KeyTopBevel",
 			InitCommand = function(self)
-				self:y(-6)
+				self:y(-5.5)
 				self:zoomto(keyW, 1)
 				self:diffuse(color("0.35, 0.42, 0.55, 0.8"))
 			end,
@@ -244,7 +244,7 @@ local chipsContainer = Def.ActorFrame {
 		Def.Quad {
 			Name = "KeyBottomShadow",
 			InitCommand = function(self)
-				self:y(6)
+				self:y(5.5)
 				self:zoomto(keyW, 1)
 				self:diffuse(color("0.08, 0.09, 0.12, 0.9"))
 			end,
@@ -277,14 +277,14 @@ local chipsContainer = Def.ActorFrame {
 		Def.Quad {
 			Name = "KeyBg",
 			InitCommand = function(self)
-				self:zoomto(keyW, 14)
+				self:zoomto(keyW, 13)
 				self:diffuse(color("0.16, 0.20, 0.28, 0.95"))
 			end,
 		},
 		Def.Quad {
 			Name = "KeyTopBevel",
 			InitCommand = function(self)
-				self:y(-6)
+				self:y(-5.5)
 				self:zoomto(keyW, 1)
 				self:diffuse(color("0.40, 0.48, 0.65, 0.85"))
 			end,
@@ -292,7 +292,7 @@ local chipsContainer = Def.ActorFrame {
 		Def.Quad {
 			Name = "KeyBottomShadow",
 			InitCommand = function(self)
-				self:y(6)
+				self:y(5.5)
 				self:zoomto(keyW, 1)
 				self:diffuse(color("0.06, 0.08, 0.12, 0.95"))
 			end,
@@ -328,7 +328,7 @@ for slot = 1, maxVisualTabs do
 		Def.Quad {
 			Name = "TabBg",
 			InitCommand = function(self)
-				self:zoomto(40, 14)
+				self:zoomto(40, 13)
 				self:diffuse(color("0.10, 0.12, 0.16, 0.85"))
 			end,
 		},
@@ -337,8 +337,8 @@ for slot = 1, maxVisualTabs do
 		Def.Quad {
 			Name = "TabTopGlow",
 			InitCommand = function(self)
-				self:y(-6)
-				self:zoomto(40, 1.5)
+				self:y(-5.5)
+				self:zoomto(40, 1)
 				self:diffuse(color("0.25, 0.28, 0.35, 0.3"))
 			end,
 		},
@@ -394,8 +394,8 @@ local function UpdateVisualTabs(self, params)
 			local lbl = tab:GetChild("TabLabel")
 			local chip = subChips[1]
 			local w = tabAreaW - 4
-			bg:zoomto(w, 14):diffuse(themeColor):diffusealpha(0.85)
-			glow:zoomto(w, 1.5):diffuse(Color.White):diffusealpha(0.7)
+			bg:zoomto(w, 13):diffuse(themeColor):diffusealpha(0.85)
+			glow:y(-5.5):zoomto(w, 1):diffuse(Color.White):diffusealpha(0.7)
 			lbl:zoom(0.35):diffuse(Color.White):maxwidth((w - 8) / 0.35)
 			lbl:settext(string.format("%s  (%d songs)", chip.label or "", totalSongs))
 		end
@@ -439,8 +439,8 @@ local function UpdateVisualTabs(self, params)
 				local lbl = tab:GetChild("TabLabel")
 
 				local quadW = math.max(10, thisW - 2)
-				bg:zoomto(quadW, 14)
-				glow:zoomto(quadW, 1.5)
+				bg:zoomto(quadW, 13)
+				glow:y(-5.5):zoomto(quadW, 1)
 
 				if isActive then
 					bg:diffuse(themeColor):diffusealpha(0.90)
@@ -497,8 +497,8 @@ local function UpdateVisualTabs(self, params)
 			local lbl = tab:GetChild("TabLabel")
 
 			local quadW = math.max(10, s.w - 3)
-			bg:zoomto(quadW, 14)
-			glow:zoomto(quadW, 1.5)
+			bg:zoomto(quadW, 13)
+			glow:y(-5.5):zoomto(quadW, 1)
 
 			if s.isActive then
 				bg:diffuse(themeColor):diffusealpha(0.90)

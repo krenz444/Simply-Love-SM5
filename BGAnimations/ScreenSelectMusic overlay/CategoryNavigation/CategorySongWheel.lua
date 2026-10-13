@@ -7,8 +7,8 @@ local CategorySongWheel = {}
 local wheelX = IsUsingWideScreen() and (_screen.cx + _screen.w/4) or (_screen.cx + 160)
 local wheelW = IsUsingWideScreen() and 396 or 300
 local maxRows = 14
-local rowHeight = 27.2
-local startY = 75
+local rowHeight = 26.5
+local startY = 86
 _G.CategorySongWheel_MaxRows = maxRows
 
 -- Format helpers
@@ -113,17 +113,17 @@ for r = 1, maxRows do
 			if isSelected then
 				cardBg:diffuse(color("0.13, 0.17, 0.26, 0.98"))
 				titleText:diffuse(Color.White)
-				titleText:zoom(0.50)
+				titleText:zoom(0.49)
 				subText:diffuse(color("#ccddee"))
-				subText:zoom(0.36)
+				subText:zoom(0.35)
 				bpmLengthText:diffuse(Color.White)
 				bpmLengthText:zoom(0.38)
 			else
 				cardBg:diffuse(color("0.06, 0.08, 0.12, 0.90"))
 				titleText:diffuse(color("#c8d6e5"))
-				titleText:zoom(0.50)
+				titleText:zoom(0.49)
 				subText:diffuse(color("#778899"))
-				subText:zoom(0.36)
+				subText:zoom(0.35)
 				bpmLengthText:diffuse(color("#778899"))
 				bpmLengthText:zoom(0.38)
 			end
@@ -195,63 +195,63 @@ for r = 1, maxRows do
 			end,
 		},
 
-		-- Favorite Glowing Gold Border around Meter Badge (28x24px)
+		-- Favorite Glowing Gold Border around Meter Badge (28x22px)
 		Def.Quad {
 			Name = "FavBadgeBorder",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 18)
-				self:zoomto(28, 24)
+				self:zoomto(28, 22)
 				self:diffuse(color("#ffd700"))
 				self:visible(false)
 			end,
 		},
 
-		-- Difficulty Meter Badge Quad (24x20px compact)
+		-- Difficulty Meter Badge Quad (24x18px compact)
 		Def.Quad {
 			Name = "MeterBadgeBg",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 18)
-				self:zoomto(24, 20)
+				self:zoomto(24, 18)
 				self:diffuse(color("0.15, 0.18, 0.26, 1.0"))
 			end,
 		},
 
-		-- Difficulty Meter Text (zoom 0.48)
+		-- Difficulty Meter Text (zoom 0.46)
 		LoadFont("Common Normal") .. {
 			Name = "MeterText",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 18)
-				self:zoom(0.48)
+				self:zoom(0.46)
 				self:shadowlength(0)
 				self:diffuse(Color.White)
 				self:settext("")
 			end,
 		},
 
-		-- Song Title (zoom 0.50)
+		-- Song Title (zoom 0.49)
 		LoadFont("Common Normal") .. {
 			Name = "TitleText",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 38)
 				self:y(-5)
 				self:horizalign(left)
-				self:zoom(0.50)
-				self:maxwidth((wheelW - 145) / 0.50)
+				self:zoom(0.49)
+				self:maxwidth((wheelW - 145) / 0.49)
 				self:diffuse(Color.White)
 				self:shadowlength(0)
 				self:settext("")
 			end,
 		},
 
-		-- Artist & Pack Subtitle (zoom 0.36)
+		-- Artist & Pack Subtitle (zoom 0.35)
 		LoadFont("Common Normal") .. {
 			Name = "SubText",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 38)
-				self:y(6)
+				self:y(5.5)
 				self:horizalign(left)
-				self:zoom(0.36)
-				self:maxwidth((wheelW - 145) / 0.36)
+				self:zoom(0.35)
+				self:maxwidth((wheelW - 145) / 0.35)
 				self:diffuse(color("#778899"))
 				self:shadowlength(0)
 				self:settext("")
@@ -412,16 +412,16 @@ local hudAF = Def.ActorFrame {
 		end,
 	},
 
-	-- Unified Hotkeys and Status Text (centered right in footer bar at y = 464)
+	-- Unified Hotkeys and Status Text (centered vertically in footer bar)
 	LoadFont("Common Normal") .. {
 		Name = "UnifiedControlText",
 		InitCommand = function(self)
-			self:y(0)
+			self:y(-7)
 			self:horizalign(center)
-			self:zoom(IsUsingWideScreen() and 0.55 or 0.46)
+			self:zoom(IsUsingWideScreen() and 0.52 or 0.44)
 			self:shadowlength(0)
 			self:diffuse(Color.White)
-			self:maxwidth((_screen.w - 16) / (IsUsingWideScreen() and 0.55 or 0.46))
+			self:maxwidth((_screen.w - 16) / (IsUsingWideScreen() and 0.52 or 0.44))
 			self:settext("")
 		end,
 		UpdateCategoryUIMessageCommand = function(self, params)
