@@ -114,11 +114,15 @@ for r = 1, maxRows do
 				titleText:diffuse(Color.White)
 				titleText:zoom(0.57)
 				subText:diffuse(color("#ccddee"))
+				bpmLengthText:diffuse(Color.White)
+				bpmLengthText:zoom(0.46)
 			else
 				cardBg:diffuse(color("0.06, 0.08, 0.12, 0.90"))
 				titleText:diffuse(color("#c8d6e5"))
 				titleText:zoom(0.53)
 				subText:diffuse(color("#778899"))
+				bpmLengthText:diffuse(color("#778899"))
+				bpmLengthText:zoom(0.42)
 			end
 
 			titleText:settext(entry.title or "")
@@ -299,45 +303,6 @@ af[#af + 1] = Def.Quad {
 	end,
 }
 
--- -------------------------------------------------------------
--- Empty Results Notice
--- -------------------------------------------------------------
-af[#af + 1] = Def.ActorFrame {
-	Name = "NoSongsNotice",
-	InitCommand = function(self)
-		self:y(startY + trackH / 2 - rowHeight / 2)
-		self:visible(false)
-	end,
-	UpdateCategoryUIMessageCommand = function(self, params)
-		if not params or not params.songs or #params.songs == 0 then
-			self:visible(true)
-		else
-			self:visible(false)
-		end
-	end,
-	Def.Quad {
-		InitCommand = function(self)
-			self:zoomto(wheelW - 30, 60)
-			self:diffuse(color("0.07, 0.09, 0.14, 0.95"))
-		end,
-	},
-	LoadFont("Common Normal") .. {
-		InitCommand = function(self)
-			self:y(-10)
-			self:zoom(0.55)
-			self:diffuse(Color.White)
-			self:settext("No songs found in this category")
-		end,
-	},
-	LoadFont("Common Normal") .. {
-		InitCommand = function(self)
-			self:y(12)
-			self:zoom(0.42)
-			self:diffuse(color("#8899aa"))
-			self:settext("Press Tab to change category or [ / ] to switch filter")
-		end,
-	},
-}
 
 -- -------------------------------------------------------------
 -- Empty State Helper (displayed when 0 songs match category/filter)
