@@ -17,6 +17,7 @@ local CategoryEngine = LoadActor("CategoryEngine.lua")
 local CategoryRibbon = LoadActor("CategoryRibbon.lua")
 local CategorySongWheel = LoadActor("CategorySongWheel.lua")
 local SongSearchEngine = CategoryEngine.GetSearchEngine()
+local WheelSync = LoadActor("../KeyboardOmnibar/WheelSync.lua")
 
 -- References to UI Actors
 local rootActor = nil
@@ -30,7 +31,8 @@ local currentSongs = {}
 local selectedSongIdx = 1
 local topVisibleIdx = 1
 local maxRows = 14
-local isStarting = false           -- Start was accepted; the screen is leaving
+local isStarting = false           -- Start was handed to the engine; ignore further input
+local isLeaving = false            -- the screen's Off sequence has begun
 
 local isShiftHeld = false
 local isCtrlHeld = false
@@ -83,15 +85,6 @@ local function ClampTop(sel)
 	return math.max(1, math.min(#currentSongs - maxRows + 1, sel - 2))
 end
 
--- SelectSong() cannot move between sections under these sorts when a section was last opened
--- by hand (MusicWheel::SelectSong re-opens sLastOpenSection). Group sort is always safe.
-local function EnsureWheelSortable(wheel)
-	local so = GAMESTATE:GetSortOrder()
-	if so == "SortOrder_Preferred" or so == "SortOrder_Meter" then
-		wheel:ChangeSort("SortOrder_Group")
-	end
-end
-
 local function RecordRecent(song)
 	if song and SongSearchEngine and SongSearchEngine.AddRecentSong then
 		SongSearchEngine.AddRecentSong(song)
@@ -99,24 +92,33 @@ local function RecordRecent(song)
 end
 
 -- Bring the (hidden) native wheel and the engine's selection-driven UI in line with `pendingWheelSong`.
+-- Returns true when the wheel accepted the song.
 local function FlushWheelSync()
 	local song = pendingWheelSong
-	if not song then return end
+	if not song then return false end
 	pendingWheelSong = nil
 	local top, wheel = GetTopAndWheel()
-	if not wheel then return end
-	EnsureWheelSortable(wheel)
-	if wheel:SelectSong(song) then
-		-- ScreenSelectMusic::AfterMusicChange(): sets m_pCurSong from the wheel and refreshes
-		-- banner / steps / density graph / sample music exactly as a normal wheel move does.
-		top:PostScreenMessage("SM_SongChanged", 0)
-	end
+	if not wheel then return false end
+	-- Selects the song, redraws the wheel rows, and posts SM_SongChanged so that
+	-- ScreenSelectMusic::AfterMusicChange() sets m_pCurSong from the wheel and refreshes banner /
+	-- steps / density graph / sample music exactly as a normal wheel move does.
+	return WheelSync.SelectSong(top, wheel, song)
 end
 
 local function ScheduleSettle()
 	if rootActor then
 		rootActor:stoptweening():sleep(SETTLE_DELAY):queuecommand("SettleSelection")
 	end
+end
+
+-- Seconds left on the screen's menu timer (99 when the timer is disabled), or nil if unreadable.
+-- When the timer expires the ENGINE starts whatever the native wheel has selected, so the wheel
+-- must never lag the highlighted row near expiry.
+local function MenuTimerSecondsLeft()
+	local top = SCREENMAN:GetTopScreen()
+	local timer = top and top.GetChild and top:GetChild("Timer")
+	if timer and timer.GetSeconds then return timer:GetSeconds() end
+	return nil
 end
 
 -- Broadcast UI State to Ribbon and SongWheel
@@ -147,10 +149,16 @@ end
 SyncCurrentSong = function(song)
 	if not song then return end
 	GAMESTATE:SetPreferredSong(song)
+	-- BroadcastOnChangePtr::Set() already broadcasts CurrentSongChanged; an extra explicit
+	-- broadcast only made every listener (info pane, density graph, ...) work twice per move.
 	GAMESTATE:SetCurrentSong(song)
-	MESSAGEMAN:Broadcast("CurrentSongChanged")
 	pendingWheelSong = song
-	ScheduleSettle()
+	local left = MenuTimerSecondsLeft()
+	if left and left < 1.5 then
+		FlushWheelSync()
+	else
+		ScheduleSettle()
+	end
 end
 
 -- Rebuild the list for the active Category & SubChip.
@@ -328,29 +336,65 @@ ExitKeyboardMode = function()
 	MESSAGEMAN:Broadcast("CategoryNavigationModeChanged", { active = false })
 end
 
--- Start the highlighted song through the engine's own fade-out path.
+-- Start the highlighted song THROUGH THE ENGINE'S OWN Start handling.
+--
+-- The previous version went straight to StartTransitioningScreen("SM_BeginFadingOut"), which
+-- skips ScreenSelectMusic::MenuStart: no "Press START for options" window (so ScreenPlayerOptions
+-- - speed mods etc. - was unreachable from Keyboard Mode), no m_SelectionState = Finalized, no
+-- StepsChosen / compatible-style / prepare_song_for_gameplay.
+--
+-- The screen's SM_MenuTimer handler is exactly "FinishChangingSorts(); MenuStart()", so once the
+-- native wheel is on the highlighted song we hand the start over to it. MenuStart then runs the
+-- stock sequence (finalize, options prompt, fade-out) and the Off commands give input back to
+-- the engine, so a second Start during the prompt opens Player Options as usual.
+local function AbortStart(reason)
+	isStarting = false
+	Trace("CATEGORY_NAV: start aborted: " .. tostring(reason))
+	SOUND:PlayOnce(THEME:GetPathS("Common", "invalid"))
+	SCREENMAN:SystemMessage("Could not start that song (" .. tostring(reason) .. ")")
+end
+
 local function StartSelectedSong()
 	if isStarting then return end
 	local entry = currentSongs[selectedSongIdx]
 	local top = SCREENMAN:GetTopScreen()
-	if not (entry and entry.song and top and top.StartTransitioningScreen) then
+	if not (entry and entry.song and top and top.PostScreenMessage and rootActor) then
 		SOUND:PlayOnce(THEME:GetPathS("Common", "invalid"))
 		return
 	end
 	isStarting = true
 
-	-- The highlighted row IS the song that will be played.
-	if GAMESTATE:GetCurrentSong() ~= entry.song then SyncCurrentSong(entry.song) end
-	FlushWheelSync()
+	-- The highlighted row IS the song that will be played: engine song + native wheel selection.
+	GAMESTATE:SetPreferredSong(entry.song)
+	GAMESTATE:SetCurrentSong(entry.song)
+	pendingWheelSong = entry.song
+	if not FlushWheelSync() then
+		AbortStart("the wheel did not select it")
+		return
+	end
 	RecordRecent(entry.song)
 
+	-- Give ScreenSelectMusic a few frames to process SM_SongChanged (AfterMusicChange) before
+	-- the engine starts; StartEngine re-checks that the wheel really is on this song.
+	rootActor:stoptweening():sleep(0.06):queuecommand("StartEngine")
+end
+
+local function StartEngine()
+	local entry = currentSongs[selectedSongIdx]
+	local top, wheel = GetTopAndWheel()
+	-- MenuStart plays the wheel's selection (or a RANDOM song if nothing is selected), so make
+	-- sure the selection is a song and that it is the one that is highlighted.
+	if not (entry and top and wheel
+		and wheel:GetSelectedType() == "WheelItemDataType_Song"
+		and GAMESTATE:GetCurrentSong() == entry.song) then
+		AbortStart("the wheel is not on that song")
+		return
+	end
 	SOUND:PlayOnce(THEME:GetPathS("Common", "start"))
-	-- Same message ScreenSelectMusic::MenuStart uses.
-	top:StartTransitioningScreen("SM_BeginFadingOut")
-	-- Starting the transition plays every actor's OffCommand synchronously, and the stock
-	-- SortMenu's OffCommand hands input back to the engine for all players. Re-assert the
-	-- redirect so Left/Right/Back cannot change the wheel while the screen fades out.
-	SetRedirect(true)
+	top:PostScreenMessage("SM_MenuTimer", 0)
+	-- If MenuStart declined (e.g. the screen's input lock right after loading) nothing leaves;
+	-- let the player try again instead of staying stuck in isStarting.
+	rootActor:sleep(1.2):queuecommand("StartWatchdog")
 end
 
 -- Wheel mode: remember songs the player actually starts so "Recent Songs" means played songs.
@@ -383,11 +427,26 @@ local af = Def.ActorFrame {
 		end
 	end,
 	SettleSelectionCommand = function(self)
-		if isNavActive then FlushWheelSync() end
+		if isNavActive and not isStarting then FlushWheelSync() end
+	end,
+	StartEngineCommand = function(self)
+		StartEngine()
+	end,
+	StartWatchdogCommand = function(self)
+		-- still here a second after handing the start to the engine: it declined; allow a retry
+		if not isLeaving then isStarting = false end
+	end,
+	-- The Omnibar (Shift+Enter) hands its own start to the engine: stop syncing the wheel.
+	EngineStartRequestedMessageCommand = function(self)
+		isStarting = true
+		pendingWheelSong = nil
+		self:stoptweening()
 	end,
 	OffCommand = function(self)
-		-- NOTE: input redirection is deliberately NOT cleared here: it is per-screen state that dies
-		-- with the screen (see StartSelectedSong for why it is re-asserted after the Off commands).
+		-- NOTE: input redirection is deliberately NOT touched here. The stock SortMenu's own
+		-- OffCommand hands input back to the engine, which is exactly what the engine's "Press
+		-- START for options" window needs; the per-screen flag dies with the screen anyway.
+		isLeaving = true
 		local top = SCREENMAN:GetTopScreen()
 		if top and top.RemoveInputCallback then
 			top:RemoveInputCallback(CategoryInputHandler)
@@ -491,6 +550,13 @@ CategoryInputHandler = function(event)
 	-- CASE 1: Normal Scroll Wheel Mode
 	-- =========================================================
 	if not isNavActive then
+		-- Keyboard Mode is off and the Omnibar is shut, so any input redirection belongs to a
+		-- stock modal (Sort Menu, Leaderboard, Test Input, song search). It owns the keyboard:
+		-- never switch modes underneath it.
+		if SCREENMAN:get_input_redirected(PLAYER_1) or SCREENMAN:get_input_redirected(PLAYER_2) then
+			return false
+		end
+
 		if btn == "DeviceButton_tab" or btn == "DeviceButton_f3" then
 			if eventType == "InputEventType_FirstPress" then
 				EnterKeyboardMode()

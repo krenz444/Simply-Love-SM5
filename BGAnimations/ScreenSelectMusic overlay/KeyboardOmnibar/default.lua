@@ -3,6 +3,7 @@
 
 local SongSearchEngine = LoadActor("SongSearchEngine.lua")
 local KeyboardLayout = LoadActor("KeyboardLayout.lua")
+local WheelSync = LoadActor("WheelSync.lua")
 
 -- State variables
 local isOpen = false
@@ -336,62 +337,73 @@ local function SelectSongAndClose(directPlay)
 	-- Move the native wheel FIRST so that whoever reacts to HideOmnibar (Keyboard Mode) sees the
 	-- engine already on the searched song.
 	if wheel and wheel.SelectSong then
-		local curSort = GAMESTATE:GetSortOrder()
-		if curSort == "SortOrder_Preferred" or curSort == "SortOrder_Popularity" or curSort == "SortOrder_Recent"
-			or curSort == "SortOrder_Meter" then
-			wheel:ChangeSort("SortOrder_Group")
-		end
-		selectedViaWheel = wheel:SelectSong(song)
-		if selectedViaWheel then
-			-- AfterMusicChange(): banner, steps, density graph and preview follow the wheel.
-			topScreen:PostScreenMessage("SM_SongChanged", 0)
-		end
+		-- selects the song, redraws the wheel rows, and posts SM_SongChanged (banner, steps,
+		-- density graph and preview follow the wheel)
+		selectedViaWheel = WheelSync.SelectSong(topScreen, wheel, song)
 	end
 
 	CloseOmnibar()
 
 	if topScreen then
-		if directPlay then
-			-- same message ScreenSelectMusic::MenuStart uses. Off commands (stock SortMenu) hand
-			-- input back to the engine, so re-assert the redirect once they have run.
-			topScreen:StartTransitioningScreen("SM_BeginFadingOut")
-			for pn in ivalues(PlayerNumber) do SCREENMAN:set_input_redirected(pn, true) end
-		elseif not selectedViaWheel then
+		if selectedViaWheel then
+			-- Quick play (Shift+Enter): hand the start to the engine so ScreenSelectMusic::MenuStart
+			-- runs its normal sequence (finalize, "Press START for options", fade-out).
+			-- SM_MenuTimer is that screen's own "FinishChangingSorts(); MenuStart()" entry point and
+			-- is queued behind the SM_SongChanged posted above, so the wheel's selection is already
+			-- the searched song. Never post it unless the wheel is on a song: with nothing
+			-- selected the engine would pick a random one.
+			if directPlay and wheel:GetSelectedType() == "WheelItemDataType_Song" then
+				MESSAGEMAN:Broadcast("EngineStartRequested")  -- Keyboard Mode stops syncing the wheel
+				topScreen:PostScreenMessage("SM_MenuTimer", 0)
+			end
+		else
+			-- The wheel cannot show that song (hidden by the active sort/filter): reload the screen on it.
 			topScreen:SetNextScreenName("ScreenReloadSSM")
 			topScreen:StartTransitioningScreen("SM_GoToNextScreen")
 		end
 	end
 end
 
--- Jump to next or previous song pack (group)
+-- Jump to the next or previous song pack.
+-- The engine's own jump (MusicWheel::JumpToNextGroup) is not exposed to Lua, and SetOpenSection()
+-- only opens the section: it leaves the wheel's selection off the new pack while the current song
+-- (and the whole info pane) stays on the old one. Select the first playable song of the target
+-- pack instead: SelectSong() opens its section, and SM_SongChanged makes ScreenSelectMusic
+-- refresh banner / steps / graph / preview exactly as a normal wheel move does.
 local function JumpGroup(direction)
 	local top = SCREENMAN:GetTopScreen()
 	if not top or not top.GetMusicWheel then return end
 	local wheel = top:GetMusicWheel()
 	if not wheel then return end
 
-	if wheel.GetCurrentSections and wheel.GetSelectedSection and wheel.SetOpenSection then
-		local sections = wheel:GetCurrentSections()
-		if sections and #sections > 0 then
-			local curSec = wheel:GetSelectedSection() or ""
-			local curIdx = 1
-			for i = 1, #sections do
-				if sections[i] == curSec then
-					curIdx = i
-					break
-				end
-			end
-			local nextIdx = curIdx + direction
-			if nextIdx < 1 then nextIdx = #sections end
-			if nextIdx > #sections then nextIdx = 1 end
-			wheel:SetOpenSection(sections[nextIdx])
-			SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "section music"))
-			return
-		end
+	local groups = SONGMAN:GetSongGroupNames()
+	if not groups or #groups == 0 then return end
+
+	local cur = GAMESTATE:GetCurrentSong()
+	local curGroup = cur and cur:GetGroupName() or wheel:GetSelectedSection()
+	local curIdx = 0
+	for i, g in ipairs(groups) do
+		if g == curGroup then curIdx = i break end
 	end
 
-	if wheel.Move then
-		wheel:Move(direction * 10)
+	local style = GAMESTATE:GetCurrentStyle()
+	local stepsType = style and style:GetStepsType() or nil
+
+	-- walk to the next pack that has something playable in the current style
+	for step = 1, #groups do
+		local idx = ((curIdx - 1 + direction * step) % #groups) + 1
+		local target = nil
+		for _, s in ipairs(SONGMAN:GetSongsInGroup(groups[idx]) or {}) do
+			if not stepsType or s:HasStepsType(stepsType) then target = s break end
+		end
+		if target then
+			GAMESTATE:SetPreferredSong(target)
+			GAMESTATE:SetCurrentSong(target)
+			if WheelSync.SelectSong(top, wheel, target) then
+				SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "section music"))
+			end
+			return
+		end
 	end
 end
 
@@ -576,6 +588,13 @@ local function KeyboardInputHandler(event)
 		return false
 	end
 
+	-- Neither Keyboard Mode nor this Omnibar is active, so any input redirection belongs to a
+	-- stock modal (Sort Menu, Leaderboard, Test Input, song search). It owns the keyboard:
+	-- typing must not open the Omnibar on top of it.
+	if SCREENMAN:get_input_redirected(PLAYER_1) or SCREENMAN:get_input_redirected(PLAYER_2) then
+		return false
+	end
+
 	local logicalChar = KeyboardLayout.TranslateButton(btn, false)
 	local typedChar = KeyboardLayout.TranslateButton(btn, isShiftHeld)
 
@@ -620,11 +639,16 @@ local function KeyboardInputHandler(event)
 			return true
 		end
 
-		-- Ctrl+G: GrooveStats Leaderboard
+		-- Ctrl+G: GrooveStats Leaderboard.
+		-- Open it through the Sort Menu's own entry point: that registers the leaderboard's input
+		-- handler and redirects input, so Start/Back dismiss it. Playing "ShowLeaderboard" directly
+		-- (as before) showed the modal with nothing listening: it could not be closed.
 		if btn == "DeviceButton_g" or logicalChar == "g" then
 			local top = SCREENMAN:GetTopScreen()
-			if top and top:GetChild("Overlay") then
-				top:GetChild("Overlay"):playcommand("ShowLeaderboard")
+			local overlay = top and top.GetChild and top:GetChild("Overlay")
+			local sortMenu = overlay and overlay.GetChild and overlay:GetChild("SortMenu")
+			if sortMenu then
+				sortMenu:playcommand("DirectInputToLeaderboard")
 			end
 			return true
 		end

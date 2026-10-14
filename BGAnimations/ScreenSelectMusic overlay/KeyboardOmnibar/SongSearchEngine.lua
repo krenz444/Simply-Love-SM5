@@ -127,20 +127,58 @@ local function trim(s)
 	return tostring(s):gsub("^%s*(.-)%s*$", "%1")
 end
 
--- Initialize or retrieve the cached song index
+-- Liveness probes: a few index entries whose Song* the engine resolves back to themselves
+-- ("Pack/Song" -> SONGMAN:FindSong). A full "Reload Songs" (SongManager::Reload -> FreeSongs)
+-- deletes every Song and builds new ones; when the library size is unchanged the count check
+-- alone cannot see that, and the cached entries would point at freed memory. FindSong() is a
+-- map lookup and comparing the returned userdata only compares the stored pointers, so the
+-- probe never dereferences a possibly dangling Song.
+local probes = {}
+
+local function IndexIsLive()
+	for _, p in ipairs(probes) do
+		if SONGMAN:FindSong(p.key) ~= p.song then
+			return false
+		end
+	end
+	return true
+end
+
+local function PickProbes()
+	probes = {}
+	local n = #indexData
+	if n == 0 then return end
+	local seen = {}
+	for _, i in ipairs({ 1, math.ceil(n / 2), n }) do
+		local e = indexData[i]
+		if e and not seen[i] and e.group and #e.group > 0 and e.folder and #e.folder > 0 then
+			seen[i] = true
+			local key = e.group .. "/" .. e.folder
+			-- Only keep probes that resolve to themselves right now (duplicate pack/folder names
+			-- across song folders would otherwise report "stale" forever and thrash the index).
+			if SONGMAN:FindSong(key) == e.song then
+				probes[#probes + 1] = { key = key, song = e.song }
+			end
+		end
+	end
+end
+
 -- Drop the cached index (e.g. after the song library was reloaded with an unchanged count).
 function SongSearchEngine.Invalidate()
 	cachedSongCount = -1
 end
 
+-- Initialize or retrieve the cached song index
 function SongSearchEngine.GetIndex()
 	local style = GAMESTATE:GetCurrentStyle()
 	local stepsType = style and style:GetStepsType() or nil
 	local numSongs = SONGMAN:GetNumSongs()
 
-	-- Cached and the library size & style are unchanged: nothing to do. (The previous version
-	-- called SONGMAN:GetAllSongs() - a 9.5k-element table - on every keystroke just to compare #.)
-	if cachedSongCount == numSongs and currentStyleCached == stepsType and #indexData > 0 then
+	-- Cached, same library size and style, and the engine still hands out the same Song objects:
+	-- nothing to do. (An earlier version called SONGMAN:GetAllSongs(), a 9.5k-element table, on
+	-- every keystroke just to compare its length.)
+	if cachedSongCount == numSongs and currentStyleCached == stepsType and #indexData > 0
+		and IndexIsLive() then
 		return indexData
 	end
 
@@ -150,6 +188,7 @@ function SongSearchEngine.GetIndex()
 	currentStyleCached = stepsType
 	indexData = {}
 	songDirMap = {}
+	probes = {}
 
 	for i = 1, #allSongs do
 		local song = allSongs[i]
@@ -250,8 +289,9 @@ function SongSearchEngine.GetIndex()
 		end
 	end
 
-	Trace(string.format("SONG_INDEX_BUILD instance=%s songs=%d ms=%.1f",
-		tostring(SongSearchEngine), #indexData, (GetTimeSinceStart() - buildStart) * 1000))
+	PickProbes()
+	Trace(string.format("SONG_INDEX_BUILD instance=%s songs=%d ms=%.1f probes=%d",
+		tostring(SongSearchEngine), #indexData, (GetTimeSinceStart() - buildStart) * 1000, #probes))
 	return indexData
 end
 

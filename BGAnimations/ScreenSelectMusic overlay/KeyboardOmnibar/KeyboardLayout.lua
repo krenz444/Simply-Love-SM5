@@ -226,17 +226,28 @@ function KeyboardLayout.SetLayout(id)
 	end
 end
 
+-- Cycle to the next layout that is actually available. "windows_auto" only exists when
+-- Save/WindowsKeyboardLayout.lua was exported (the Windows layout sync tool); without that file
+-- the old code selected a missing layout, SetLayout() silently refused, and the return value
+-- indexed nil (a Lua error, and the layout stayed stuck).
 function KeyboardLayout.CycleLayout()
 	local cur = KeyboardLayout.GetLayout()
-	local nextId = "qwerty"
+	local n = #layoutOrder
+	local start = 1
 	for i, id in ipairs(layoutOrder) do
 		if id == cur then
-			nextId = layoutOrder[(i % #layoutOrder) + 1]
+			start = i
 			break
 		end
 	end
-	KeyboardLayout.SetLayout(nextId)
-	return nextId, layouts[nextId].name
+	for step = 1, n do
+		local id = layoutOrder[((start - 1 + step) % n) + 1]
+		if layouts[id] then
+			KeyboardLayout.SetLayout(id)
+			return id, layouts[id].name
+		end
+	end
+	return cur, (layouts[cur] and layouts[cur].name) or "QWERTY"
 end
 
 function KeyboardLayout.GetLayoutName()

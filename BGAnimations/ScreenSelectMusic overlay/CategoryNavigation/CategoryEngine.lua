@@ -54,17 +54,43 @@ local bpmTiers = {
 	{ id = "speed",     label = "210+ Speed",    minB = 210, maxB = math.huge },
 }
 
+-- A-Z: every song falls in exactly one bucket. The key is the transliterated title (what
+-- StepMania itself sorts by), so a title in kanji or kana lands under its Latin reading; a title
+-- with no Latin letter or digit at all goes to "#".
 local alphabetBuckets = {
-	{ id = "num", label = "# 0-9",  chars = "^[%d%p%s]" },
-	{ id = "ac",  label = "A - C",  chars = "^[a-cA-C]" },
-	{ id = "df",  label = "D - F",  chars = "^[d-fD-F]" },
-	{ id = "gi",  label = "G - I",  chars = "^[g-iG-I]" },
-	{ id = "jl",  label = "J - L",  chars = "^[j-lJ-L]" },
-	{ id = "mo",  label = "M - O",  chars = "^[m-oM-O]" },
-	{ id = "pr",  label = "P - R",  chars = "^[p-rP-R]" },
-	{ id = "su",  label = "S - U",  chars = "^[s-uS-U]" },
-	{ id = "vz",  label = "V - Z",  chars = "^[v-zV-Z]" },
+	{ id = "num", label = "# 0-9",  letters = "" },
+	{ id = "ac",  label = "A - C",  letters = "abc" },
+	{ id = "df",  label = "D - F",  letters = "def" },
+	{ id = "gi",  label = "G - I",  letters = "ghi" },
+	{ id = "jl",  label = "J - L",  letters = "jkl" },
+	{ id = "mo",  label = "M - O",  letters = "mno" },
+	{ id = "pr",  label = "P - R",  letters = "pqr" },
+	{ id = "su",  label = "S - U",  letters = "stu" },
+	{ id = "vz",  label = "V - Z",  letters = "vwxyz" },
 }
+
+local letterToBucket = {}
+for _, b in ipairs(alphabetBuckets) do
+	for i = 1, #b.letters do
+		letterToBucket[b.letters:sub(i, i)] = b.id
+	end
+end
+
+-- Bucket id for an index entry (cached on the entry: entries are built once per library).
+local function AlphabetBucketId(entry)
+	local cached = entry._azBucket
+	if cached then return cached end
+	local key = entry.translit_title
+	if not key or key == "" then key = entry.title or "" end
+	-- first ASCII letter/digit, skipping leading symbols and any non-ASCII bytes
+	local c = key:match("^[^%w]*(%w)")
+	local id = "num"
+	if c and not c:match("%d") then
+		id = letterToBucket[c:lower()] or "num"
+	end
+	entry._azBucket = id
+	return id
+end
 
 function CategoryEngine.GetSubChips(categoryId)
 	if categoryId == "meters" then
@@ -139,6 +165,11 @@ local function ProfilesToCheck()
 	return list
 end
 
+-- NOTE: Profile:GetHighScoreList() and HasPassedAnyStepsInSong() INSERT an empty score entry for
+-- every (song, chart) they are asked about (std::map operator[]). With a whole library that
+-- pollutes the profile in memory, so only the read-only queries are used here:
+--   GetSongNumTimesPlayed(song)               -> never inserts
+--   GetHighScoreListIfExists(song, steps)     -> nil when the chart has no entry
 local function BuildPlayStatus(allEntries)
 	local status = {}
 	local style = GAMESTATE:GetCurrentStyle()
@@ -148,18 +179,27 @@ local function BuildPlayStatus(allEntries)
 	for _, e in ipairs(allEntries) do
 		local level = 0
 		local song = e.song
-		if song and stepsType then
-			for steps in ivalues(song:GetStepsByStepsType(stepsType)) do
-				for _, prof in ipairs(profiles) do
-					local list = prof and prof:GetHighScoreList(song, steps)
-					if list then
-						for hs in ivalues(list:GetHighScores()) do
-							if level < 1 then level = 1 end
-							if hs:GetGrade() ~= "Grade_Failed" then level = 2 end
-						end
-					end
+		if song then
+			for _, prof in ipairs(profiles) do
+				if prof and prof:GetSongNumTimesPlayed(song) > 0 then
+					level = 1
+					break
 				end
-				if level == 2 then break end
+			end
+			if level == 1 and stepsType then
+				-- played: cleared if any recorded score on any chart is not a fail
+				for steps in ivalues(song:GetStepsByStepsType(stepsType)) do
+					for _, prof in ipairs(profiles) do
+						local list = prof and prof:GetHighScoreListIfExists(song, steps)
+						if list then
+							for hs in ivalues(list:GetHighScores()) do
+								if hs:GetGrade() ~= "Grade_Failed" then level = 2 break end
+							end
+						end
+						if level == 2 then break end
+					end
+					if level == 2 then break end
+				end
 			end
 		end
 		status[e.song_dir] = level
@@ -241,9 +281,7 @@ function CategoryEngine.GetSongs(categoryId, subChipId)
 		for _, b in ipairs(alphabetBuckets) do if b.id == subChipId then bucket = b break end end
 		if not bucket then return allEntries end
 		for _, entry in ipairs(allEntries) do
-			local cleanTitle = (entry.title or ""):gsub("^[!%s\"'%(%[]*", "")
-			if cleanTitle == "" then cleanTitle = entry.title or "" end
-			if cleanTitle:match(bucket.chars) then results[#results + 1] = entry end
+			if AlphabetBucketId(entry) == bucket.id then results[#results + 1] = entry end
 		end
 
 	elseif categoryId == "favorites" then

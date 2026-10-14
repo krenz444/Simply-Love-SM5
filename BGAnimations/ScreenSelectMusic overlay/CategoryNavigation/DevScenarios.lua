@@ -35,6 +35,32 @@ local function snap(label)
 		tostring(ob))
 end
 
+-- Type of the row the wheel is DISPLAYING at its centre (not merely its selection index), and
+-- the number of row actors. Self-contained so it also works against code without WheelSync.
+-- WheelItemDataType numbers: 0 Generic, 1 Section, 2 ParentSection, 3 Song.
+local function centerRow(wheel)
+	local n = 0
+	while n < 64 do
+		local ok = pcall(wheel.GetWheelItem, wheel, n)
+		if not ok then break end
+		n = n + 1
+	end
+	if n == 0 then return "none", 0, "" end
+	local item = wheel:GetWheelItem(math.floor(n / 2))
+	local ok, ty = pcall(item.GetType, item)
+	local okT, title = pcall(function() return item:GetChild("SongName"):GetChild("Title"):GetText() end)
+	return ok and tostring(ty) or "unloaded", n, (okT and title) or ""
+end
+
+local function logCenter(label)
+	local wheel = SCREENMAN:GetTopScreen():GetMusicWheel()
+	local ty, n, shown = centerRow(wheel)
+	local cur = GAMESTATE:GetCurrentSong()
+	local want = cur and cur:GetDisplayMainTitle() or ""
+	T('WHEELCENTER label=%s center_type=%s rows=%d selected_type=%s engine="%s" displayed="%s" displayed_is_engine_song=%s',
+		label, ty, n, tostring(wheel:GetSelectedType()), engineTitle(), shown, tostring(shown ~= "" and shown == want))
+end
+
 -- put the NATIVE wheel on a song exactly as a player scrolling to it would
 local function landOnWheel(title)
 	local song = findSong(title)
@@ -98,17 +124,161 @@ elseif name == "omnibar" then
 	step(1.4, function() shot("after_omnibar_return") end)
 
 elseif name == "start" then
+	-- Keyboard-mode Start must go through ScreenSelectMusic::MenuStart: the engine finalizes the
+	-- selection, shows "Press START for options" (OPTIONS_PROMPT below) and gives input back to
+	-- the engine so a second Start opens Player Options.
 	step(1.0, function() landOnWheel("Conga!") end)
 	step(0.8, function() api.catnav.Enter() end)
 	step(0.8, function() snap("before_start") end)
 	step(0.0, function()
 		T("EVENT start_pressed")
 		api.catnav.Handle(ev("DeviceButton_enter", "Start"))
-		snap("start_pressed_t+0ms")
 	end)
 	step(0.15, function() snap("start_t+150ms") end)
-	step(0.3, function() snap("start_t+450ms") shot("fade_out") end)
-	step(1.0, function() T("RECENT first=%s", tostring((api.search.GetRecentSongDirs() or {})[1])) end)
+	step(0.35, function() snap("start_t+500ms") shot("options_prompt") end)
+	step(0.9, function()
+		snap("start_t+1400ms")
+		T("RECENT first=%s", tostring((api.search.GetRecentSongDirs() or {})[1]))
+	end)
+
+elseif name == "omnibar_play" then
+	-- Omnibar quick play (Shift+Enter) from wheel mode must take the same engine path.
+	step(1.0, function() landOnWheel("Conga!") end)
+	step(0.5, function() api.omnibar.Open("") end)
+	step(0.5, function() api.omnibar.Query("danger zone") end)
+	step(0.5, function()
+		T("EVENT quick_play")
+		api.omnibar.SelectCurrent(true)
+	end)
+	step(0.5, function()
+		local w = SCREENMAN:GetTopScreen():GetMusicWheel()
+		T("QUICKPLAY t+500ms engine=\"%s\" wheel_type=%s redirP1=%s screen=%s", engineTitle(),
+			tostring(w:GetSelectedType()), tostring(SCREENMAN:get_input_redirected(PLAYER_1)),
+			tostring(SCREENMAN:GetTopScreen():GetName()))
+		shot("quick_play_prompt")
+	end)
+
+elseif name == "reload" then
+	-- A FULL song reload (SongManager::Reload -> FreeSongs) with an unchanged song count.
+	-- The sandbox's _fallback metrics send ScreenReloadSongs back to ScreenSelectMusic.
+	-- Stage 2 never dereferences a cached Song: it only compares userdata pointers.
+	local stage = SL.Global.DevReloadStage or 1
+	if stage == 1 then
+		step(0.8, function() api.catnav.Enter() end)
+		step(0.5, function()
+			local idx = api.search.GetIndex()
+			SL.Global.DevReloadFirst = { group = idx[1].group, folder = idx[1].folder }
+			SL.Global.DevReloadStage = 2
+			T("RELOAD stage=1 index=%d first=%s/%s", #idx, idx[1].group, idx[1].folder)
+			-- A real reload goes through the title menu, which resets game state. This shortcut
+			-- does not, so drop the engine's own references to songs that are about to be freed.
+			GAMESTATE:SetCurrentSong(nil)
+			GAMESTATE:SetPreferredSong(nil)
+			for pn in ivalues(PlayerNumber) do GAMESTATE:SetCurrentSteps(pn, nil) end
+			SCREENMAN:SetNewScreen("ScreenReloadSongs")
+		end)
+	else
+		local first = SL.Global.DevReloadFirst
+		step(1.0, function()
+			local live = SONGMAN:FindSong(first.group .. "/" .. first.folder)
+			local idx = api.search.GetIndex()
+			T("RELOAD stage=2 index=%d first_song_is_live=%s", #idx, tostring(idx[1].song == live))
+		end)
+	end
+
+elseif name == "played_fx" then
+	-- Building the PLAYED category must not insert score entries into the profile.
+	step(0.8, function() api.catnav.Enter() end)
+	step(0.5, function()
+		local song = findSong("Conga!")
+		local st = GAMESTATE:GetCurrentStyle():GetStepsType()
+		local steps = song:GetStepsByStepsType(st)[1]
+		local prof = PROFILEMAN:GetMachineProfile()
+		local before = prof:GetHighScoreListIfExists(song, steps)
+		api.engine.InvalidatePlayCache()
+		local n = #api.engine.GetSongs("played", "all")
+		local after = prof:GetHighScoreListIfExists(song, steps)
+		T("PLAYEDFX entry_before=%s entry_after=%s played=%d", tostring(before ~= nil), tostring(after ~= nil), n)
+	end)
+
+elseif name == "ctrl_l" then
+	-- Run with Save/WindowsKeyboardLayout.lua hidden (run_scenarios.py --hide-save-file).
+	step(0.5, function()
+		local h = api.omnibar.Handle
+		for i = 1, 5 do
+			h(ev("DeviceButton_left ctrl"))
+			local ok, err = pcall(h, ev("DeviceButton_l"))
+			h(ev("DeviceButton_left ctrl", "", "InputEventType_Release"))
+			T("CTRL_L press=%d ok=%s layout=%s err=\"%s\"", i, tostring(ok), tostring(ThemePrefs.Get("KeyboardLayout")), tostring(ok and "" or err))
+		end
+	end)
+
+elseif name == "ctrl_g" then
+	step(1.0, function() landOnWheel("Conga!") end)
+	step(0.5, function()
+		local h = api.omnibar.Handle
+		h(ev("DeviceButton_left ctrl"))
+		h(ev("DeviceButton_g"))
+		h(ev("DeviceButton_left ctrl", "", "InputEventType_Release"))
+		local overlay = SCREENMAN:GetTopScreen():GetChild("Overlay")
+		local lb = overlay:GetChild("LeaderboardMaster")
+		T("CTRL_G leaderboard_visible=%s redirP1=%s redirP2=%s", tostring(lb and lb:GetVisible()),
+			tostring(SCREENMAN:get_input_redirected(PLAYER_1)), tostring(SCREENMAN:get_input_redirected(PLAYER_2)))
+	end)
+	step(0.4, function()
+		-- typing while the leaderboard is up must not open the Omnibar on top of it
+		api.omnibar.Handle(ev("DeviceButton_a"))
+		T("CTRL_G typing_opened_omnibar=%s", tostring(api.omnibar.IsOpen()))
+		if api.omnibar.IsOpen() then api.omnibar.Close() end
+	end)
+	step(1.0, function() shot("leaderboard") end)
+
+elseif name == "jump_group" then
+	step(1.0, function() landOnWheel("Conga!") end)
+	step(0.8, function()
+		local groups = SONGMAN:GetSongGroupNames()
+		local cur = GAMESTATE:GetCurrentSong():GetGroupName()
+		local ci = 1
+		for i, g in ipairs(groups) do if g == cur then ci = i end end
+		T("JUMP before group=\"%s\" expect_next=\"%s\"", cur, groups[(ci % #groups) + 1])
+		api.omnibar.Handle(ev("DeviceButton_right bracket"))
+	end)
+	step(0.8, function()
+		local w = SCREENMAN:GetTopScreen():GetMusicWheel()
+		local s = GAMESTATE:GetCurrentSong()
+		T("JUMP after engine=\"%s\" group=\"%s\" wheel_type=%s", engineTitle(), s and s:GetGroupName() or "<nil>", tostring(w:GetSelectedType()))
+		logCenter("after_jump")
+	end)
+	step(1.4, function() shot("after_jump") end)
+
+elseif name == "exit_visual" then
+	-- Move the cursor in Keyboard Mode, then return to the wheel: the wheel must DISPLAY the
+	-- song the engine is on, not the arrangement it had before Keyboard Mode.
+	step(1.0, function() landOnWheel("Conga!") end)
+	step(0.8, function() api.catnav.Enter() end)
+	step(0.8, function()
+		local st = api.catnav.State()
+		for k = 1, 6 do api.catnav.SelectIndex(st.selectedIdx + k) end
+	end)
+	step(0.6, function() snap("keyboard_moved") end)
+	step(0.2, function() api.catnav.Exit() end)
+	step(0.8, function()
+		T('EXITVISUAL engine="%s"', engineTitle())
+		logCenter("after_exit")
+	end)
+	step(1.4, function() shot("after_exit") end)
+
+elseif name == "omnibar_wheel" then
+	-- Omnibar search selection from plain wheel mode (the stock wheel is visible).
+	step(1.0, function() landOnWheel("Conga!") end)
+	step(0.5, function() api.omnibar.Open("") end)
+	step(0.5, function() api.omnibar.Query("danger zone") end)
+	step(0.2, function() api.omnibar.SelectCurrent(false) end)
+	step(0.8, function()
+		T('OMNIBARWHEEL engine="%s"', engineTitle())
+		logCenter("after_omnibar_select")
+	end)
+	step(1.4, function() shot("after_omnibar_select") end)
 
 elseif name == "arbit" then
 	local catH, omniH = api.catnav.Handle, api.omnibar.Handle
@@ -277,5 +447,15 @@ return Def.ActorFrame {
 		local ok, err = pcall(s.fn, self)
 		if not ok then T("ERROR step=%d err=%s", idx, tostring(err)) end
 		self:sleep(s.wait or 0.5):queuecommand("Next")
+	end,
+	-- The engine plays this on the screen from MenuStart (finalized selection). It only fires when
+	-- ScreenSelectMusic::MenuStart really ran.
+	ShowPressStartForOptionsCommand = function(self)
+		T("OPTIONS_PROMPT shown redirP1=%s redirP2=%s screen=%s",
+			tostring(SCREENMAN:get_input_redirected(PLAYER_1)), tostring(SCREENMAN:get_input_redirected(PLAYER_2)),
+			tostring(SCREENMAN:GetTopScreen():GetName()))
+	end,
+	StartFinalizedMessageCommand = function(self)
+		T("START_FINALIZED engine=%s", engineTitle())
 	end,
 }
