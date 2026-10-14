@@ -410,6 +410,7 @@ local hudAF = Def.ActorFrame {
 	Name = "UnifiedControlHUD",
 	InitCommand = function(self)
 		self:xy(-wheelX, _screen.h - 16)
+		self:draworder(120)
 	end,
 
 	-- Semi-transparent footer quad (left side only, under PaneDisplay)
@@ -418,7 +419,7 @@ local hudAF = Def.ActorFrame {
 		InitCommand = function(self)
 			self:x(leftBarW / 2)
 			self:zoomto(leftBarW, 32)
-			self:diffuse(color("0.04, 0.04, 0.06, 0.85"))
+			self:diffuse(color("0.03, 0.04, 0.06, 0.95"))
 		end,
 	},
 
@@ -429,10 +430,10 @@ local hudAF = Def.ActorFrame {
 			self:x(leftBarW / 2)
 			self:y(-16)
 			self:zoomto(leftBarW, 1)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.7)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.8)
 		end,
 		ColorSelectedMessageCommand = function(self)
-			self:diffuse(GetCurrentColor()):diffusealpha(0.7)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.8)
 		end,
 	},
 
@@ -444,11 +445,11 @@ local hudAF = Def.ActorFrame {
 			self:y(0)
 			self:horizalign(center)
 			self:vertalign(middle)
-			self:zoom(IsUsingWideScreen() and 0.40 or 0.33)
-			self:vertspacing(-2)
-			self:shadowlength(0)
+			self:zoom(IsUsingWideScreen() and 0.48 or 0.42)
+			self:vertspacing(-1)
+			self:shadowlength(1)
 			self:diffuse(Color.White)
-			self:maxwidth((leftBarW - 16) / (IsUsingWideScreen() and 0.40 or 0.33))
+			self:maxwidth((leftBarW - 16) / (IsUsingWideScreen() and 0.48 or 0.42))
 			self:settext("")
 		end,
 		UpdateCategoryUIMessageCommand = function(self, params)
@@ -462,7 +463,7 @@ local hudAF = Def.ActorFrame {
 					self:diffuse(color("#ff6666"))
 				else
 					if IsUsingWideScreen() then
-						self:settext(string.format("FILTER: \"%s\" (Song %d of %d)   •   [ Enter ] Play\n[ Up / Down ] Browse   •   [ BackSpace ] Delete   •   [ Esc ] Clear   •   [ / ] All", query, sel, total))
+						self:settext(string.format("FILTER: \"%s\" (Song %d of %d)   •   [ Enter ] Play\n[ Up / Down ] Browse   •   [ BackSpace ] Del   •   [ Esc ] Clear   •   [ / ] All", query, sel, total))
 					else
 						self:settext(string.format("FILTER: \"%s\" (%d/%d)   •   [ Enter ] Play\n[ Up/Dn ] Browse   •   [ Bksp ] Del   •   [ Esc ] Clear   •   [ / ] All", query, sel, total))
 					end
@@ -474,7 +475,7 @@ local hudAF = Def.ActorFrame {
 					self:diffuse(color("#ffaa66"))
 				else
 					if IsUsingWideScreen() then
-						self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Down ] Browse   •   [ 1-5 ] Difficulty\n[ Tab ] Category   •   [ Left / Right ] Tabs   •   [ Esc ] Wheel", sel, total))
+						self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Down ] Browse   •   [ 1-5 ] Diff\n[ Tab ] Category   •   [ Left / Right ] Tabs   •   [ Esc ] Wheel", sel, total))
 					else
 						self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Dn ] Browse   •   [ 1-5 ] Diff\n[ Tab ] Cat   •   [ L / R ] Tabs   •   [ Esc ] Wheel", sel, total))
 					end
