@@ -69,7 +69,9 @@ function WheelSync.CenterRow(wheel)
 	end
 	if n == 0 then return nil end
 	local item = wheel:GetWheelItem(math.floor(n / 2))
-	return item:GetType(), item:GetText(), n
+	local ok, ty = pcall(item.GetType, item)
+	local okT, title = pcall(function() return item:GetChild("SongName"):GetChild("Title"):GetText() end)
+	return (ok and ty) or nil, (okT and title) or "", n
 end
 
 return WheelSync
