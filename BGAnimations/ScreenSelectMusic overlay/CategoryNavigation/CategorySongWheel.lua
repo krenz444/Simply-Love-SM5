@@ -404,7 +404,7 @@ af[#af + 1] = emptyStateAF
 -- Positioned strictly on the left side under PaneDisplay
 -- Right side under the 15-row song wheel is 100% transparent
 -- -------------------------------------------------------------
-local leftBarW = math.floor(wheelX - wheelW / 2 - 2)
+local leftBarW = math.floor(_screen.w / 2 - 10)
 
 local hudAF = Def.ActorFrame {
 	Name = "UnifiedControlHUD",
