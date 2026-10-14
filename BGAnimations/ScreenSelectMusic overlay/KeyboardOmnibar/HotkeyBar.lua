@@ -132,7 +132,7 @@ local topPill = Def.ActorFrame {
 		},
 	},
 
-	-- Action 2: Categories ([Tab])
+	-- Action 2: Keyboard Mode ([Tab])
 	Def.ActorFrame {
 		Name = "CategoriesAction",
 		InitCommand = function(self)
@@ -142,8 +142,8 @@ local topPill = Def.ActorFrame {
 		-- Keycap solid background pill
 		Def.Quad {
 			InitCommand = function(self)
-				self:x(-34)
-				self:zoomto(30, 16)
+				self:x(IsUsingWideScreen() and -38 or -28)
+				self:zoomto(IsUsingWideScreen() and 28 or 24, 16)
 				self:diffuse(GetCurrentColor())
 			end,
 			ColorSelectedMessageCommand = function(self)
@@ -154,8 +154,8 @@ local topPill = Def.ActorFrame {
 		-- Keycap text inside badge
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:x(-34)
-				self:zoom(0.55)
+				self:x(IsUsingWideScreen() and -38 or -28)
+				self:zoom(IsUsingWideScreen() and 0.52 or 0.44)
 				self:diffuse(color("0.05, 0.05, 0.08, 1.0"))
 				self:shadowlength(0)
 				self:settext("Tab")
@@ -165,11 +165,12 @@ local topPill = Def.ActorFrame {
 		-- Action label
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:x(12)
-				self:zoom(0.56)
+				self:x(IsUsingWideScreen() and 14 or 10)
+				self:zoom(IsUsingWideScreen() and 0.44 or 0.36)
+				self:maxwidth((topPillW / 2 - (IsUsingWideScreen() and 34 or 28)) / (IsUsingWideScreen() and 0.44 or 0.36))
 				self:diffuse(Color.White)
 				self:shadowlength(0)
-				self:settext("Categories")
+				self:settext("Keyboard Mode")
 			end,
 		},
 	},
