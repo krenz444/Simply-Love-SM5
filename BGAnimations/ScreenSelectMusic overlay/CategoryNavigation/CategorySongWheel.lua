@@ -6,7 +6,7 @@ local CategorySongWheel = {}
 
 local wheelX = IsUsingWideScreen() and (_screen.cx + _screen.w/4) or (_screen.cx + 160)
 local wheelW = IsUsingWideScreen() and 396 or 300
-local maxRows = 14
+local maxRows = 15
 local rowHeight = 26.5
 local startY = 86
 _G.CategorySongWheel_MaxRows = maxRows
@@ -400,29 +400,35 @@ local emptyStateAF = Def.ActorFrame {
 af[#af + 1] = emptyStateAF
 
 -- -------------------------------------------------------------
--- Streamlined Unified Control HUD in Footer Element
--- Relocated directly into the bottom footer element replacing Event Mode / Credits
+-- Streamlined Unified Control HUD in Left Footer Section
+-- Positioned strictly on the left side under PaneDisplay
+-- Right side under the 15-row song wheel is 100% transparent
 -- -------------------------------------------------------------
+local leftBarW = math.floor(wheelX - wheelW / 2 - 2)
+
 local hudAF = Def.ActorFrame {
 	Name = "UnifiedControlHUD",
 	InitCommand = function(self)
-		self:xy(_screen.cx - wheelX, _screen.h - 16)
+		self:xy(-wheelX, _screen.h - 16)
 	end,
 
-	-- Footer Quad background (fills entire 32px footer bar flush with screen bottom)
+	-- Semi-transparent footer quad (left side only, under PaneDisplay)
 	Def.Quad {
+		Name = "HudLeftBg",
 		InitCommand = function(self)
-			self:zoomto(_screen.w, 32)
-			self:diffuse(color("0.04, 0.04, 0.06, 0.98"))
+			self:x(leftBarW / 2)
+			self:zoomto(leftBarW, 32)
+			self:diffuse(color("0.04, 0.04, 0.06, 0.85"))
 		end,
 	},
 
-	-- Top accent hairline (1px at y = -16 with theme color alpha 0.7, flush at y = 448)
+	-- Top accent hairline (left side only, 1px at y = -16 flush with screen bottom footer line)
 	Def.Quad {
 		Name = "HudTopAccent",
 		InitCommand = function(self)
+			self:x(leftBarW / 2)
 			self:y(-16)
-			self:zoomto(_screen.w, 1)
+			self:zoomto(leftBarW, 1)
 			self:diffuse(GetCurrentColor()):diffusealpha(0.7)
 		end,
 		ColorSelectedMessageCommand = function(self)
@@ -430,16 +436,19 @@ local hudAF = Def.ActorFrame {
 		end,
 	},
 
-	-- Unified Hotkeys and Status Text (centered vertically in footer bar)
+	-- Unified Hotkeys and Status Text (centered in left footer section, 2 lines matching classic HUD)
 	LoadFont("Common Normal") .. {
 		Name = "UnifiedControlText",
 		InitCommand = function(self)
-			self:y(-7)
+			self:x(leftBarW / 2)
+			self:y(0)
 			self:horizalign(center)
-			self:zoom(IsUsingWideScreen() and 0.52 or 0.44)
+			self:vertalign(middle)
+			self:zoom(IsUsingWideScreen() and 0.40 or 0.33)
+			self:vertspacing(-2)
 			self:shadowlength(0)
 			self:diffuse(Color.White)
-			self:maxwidth((_screen.w - 16) / (IsUsingWideScreen() and 0.52 or 0.44))
+			self:maxwidth((leftBarW - 16) / (IsUsingWideScreen() and 0.40 or 0.33))
 			self:settext("")
 		end,
 		UpdateCategoryUIMessageCommand = function(self, params)
@@ -449,33 +458,25 @@ local hudAF = Def.ActorFrame {
 			local query = params.filterQuery or ""
 			if #query > 0 then
 				if total == 0 then
-					if IsUsingWideScreen() then
-						self:settext(string.format("NO MATCHES FOR \"%s\"   •   [ BackSpace ] Delete   •   [ Esc ] Clear Filter   •   [ / ] Search All Songs", query))
-					else
-						self:settext(string.format("NO MATCHES: \"%s\"   •   [ Bksp ] Del   •   [ Esc ] Clear   •   [ / ] All", query))
-					end
+					self:settext(string.format("NO MATCHES FOR \"%s\"\n[ BackSpace ] Delete   •   [ Esc ] Clear   •   [ / ] All Songs", query))
 					self:diffuse(color("#ff6666"))
 				else
 					if IsUsingWideScreen() then
-						self:settext(string.format("FILTER: \"%s\" (%d of %d)   •   [ Enter ] Play   •   [ Up / Down ] Browse   •   [ BackSpace ] Delete   •   [ Esc ] Clear   •   [ / ] All Songs", query, sel, total))
+						self:settext(string.format("FILTER: \"%s\" (Song %d of %d)   •   [ Enter ] Play\n[ Up / Down ] Browse   •   [ BackSpace ] Delete   •   [ Esc ] Clear   •   [ / ] All", query, sel, total))
 					else
-						self:settext(string.format("FILTER: \"%s\" (%d/%d)   •   [ Enter ] Play   •   [ Up/Dn ] Browse   •   [ Bksp ] Del   •   [ Esc ] Clear   •   [ / ] All", query, sel, total))
+						self:settext(string.format("FILTER: \"%s\" (%d/%d)   •   [ Enter ] Play\n[ Up/Dn ] Browse   •   [ Bksp ] Del   •   [ Esc ] Clear   •   [ / ] All", query, sel, total))
 					end
 					self:diffuse(color("#66ffcc"))
 				end
 			else
 				if total == 0 then
-					if IsUsingWideScreen() then
-						self:settext("0 Songs   •   [ Tab ] Category   •   [ Left / Right ] Tabs   •   [ / ] Search All   •   [ Esc ] Wheel")
-					else
-						self:settext("0 Songs   •   [ Tab ] Cat   •   [ L / R ] Tabs   •   [ / ] All   •   [ Esc ] Wheel")
-					end
+					self:settext("0 Songs in Category\n[ Tab ] Category   •   [ Left / Right ] Tabs   •   [ Esc ] Wheel")
 					self:diffuse(color("#ffaa66"))
 				else
 					if IsUsingWideScreen() then
-						self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Type ] Filter Section   •   [ / ] Search All   •   [ 1-5 ] Diff   •   [ Tab ] Tabs   •   [ Esc ] Wheel", sel, total))
+						self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Down ] Browse   •   [ 1-5 ] Difficulty\n[ Tab ] Category   •   [ Left / Right ] Tabs   •   [ Esc ] Wheel", sel, total))
 					else
-						self:settext(string.format("Song %d of %d   •   [ Type ] Filter   •   [ / ] All   •   [ 1-5 ] Diff   •   [ Tab ] Cat   •   [ Esc ] Wheel", sel, total))
+						self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Dn ] Browse   •   [ 1-5 ] Diff\n[ Tab ] Cat   •   [ L / R ] Tabs   •   [ Esc ] Wheel", sel, total))
 					end
 					self:diffuse(Color.White)
 				end

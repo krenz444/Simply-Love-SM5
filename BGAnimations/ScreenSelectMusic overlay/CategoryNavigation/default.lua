@@ -33,7 +33,7 @@ local unfilteredSongs = {}
 local filterQuery = ""
 local selectedSongIdx = 1
 local topVisibleIdx = 1
-local maxRows = 14
+local maxRows = 15
 local isStarting = false           -- Start was handed to the engine; ignore further input
 local isLeaving = false            -- the screen's Off sequence has begun
 
