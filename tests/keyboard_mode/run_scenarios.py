@@ -11,7 +11,7 @@ How it works
   4. collects every "KBDTEST ..." / "SONG_INDEX_BUILD" line into <out>/<scenario>.log
 It never sends OS-level keystrokes or mouse input; scenarios call theme code directly.
 """
-import argparse, ctypes, json, os, re, subprocess, sys, time
+import argparse, ctypes, datetime, json, os, re, subprocess, sys, time
 from ctypes import wintypes
 
 from PIL import Image
@@ -94,7 +94,27 @@ def set_pref(ini, key, value):
     open(ini, "w", encoding="utf-8").write("\n".join(lines) + "\n")
 
 
-def run(root, scenario, out, timeout, stage_reset=True):
+def log_is_fresh(path, launched):
+    """True when log.txt was started by the game process launched at `launched`."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            header = "".join(f.readline() for _ in range(8))
+    except OSError:
+        return False
+    # line 3 of log.txt: "00:00.007: Log starting 2026-10-14 09:28:56"
+    m = re.search(r"Log starting (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)", header)
+    if not m:
+        return False
+    started = datetime.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").timestamp()
+    return started >= launched - 3.0
+
+
+# Scenarios change prefs, recents and layout files: they are put back afterwards so a run never
+# leaves the install different (and a run against the wrong install is far less harmful).
+RESTORE =("ThemePrefs.ini", "KeyboardLayout.txt", "KeyboardRecentSongs.txt", "KeyboardSearchHistory.txt")
+
+
+def run(root, scenario, out, timeout, hide=()):
     prog = os.path.join(root, "Program")
     exe = os.path.join(prog, "ITGmania.exe")
     save = os.path.join(root, "Save")
@@ -102,56 +122,94 @@ def run(root, scenario, out, timeout, stage_reset=True):
     flag = os.path.join(save, "dev_scenarios.flag")
     os.makedirs(out, exist_ok=True)
 
+    backups = {}
+    for name in RESTORE:
+        p = os.path.join(save, name)
+        if os.path.exists(p):
+            backups[name] = open(p, "rb").read()
+    hidden = []
+    for name in hide:
+        p = os.path.join(save, name)
+        if os.path.exists(p):
+            os.replace(p, p + ".hidden")
+            hidden.append(p)
+
     set_pref(os.path.join(save, "ThemePrefs.ini"), "CategoryNavigation", "false")
     set_pref(os.path.join(save, "ThemePrefs.ini"), "KeyboardFeatures", "true")
     open(flag, "w").write(scenario)
 
-    if os.path.exists(log):
-        try: os.remove(log)
-        except OSError: pass
+    # The game truncates log.txt on start, but only a moment after launch: a previous run's log
+    # can still be on disk. Only a log whose first line ("Log starting <timestamp>") is from THIS
+    # launch is read; anything else is the previous scenario's output and must not be parsed.
+    launched = time.time()
     proc = subprocess.Popen([exe], cwd=prog)
     hwnd = None
     t0 = time.time()
     lines_out, shots, pos = [], {}, 0
     status = "timeout"
+    next_shot_at = None
+    keep = re.compile(r"KBDTEST |SONG_INDEX_BUILD|Lua error|Error running|attempt to")
+
+    def read_new():
+        nonlocal pos
+        if not (os.path.exists(log) and log_is_fresh(log, launched)):
+            return []
+        with open(log, "r", encoding="utf-8", errors="replace") as f:
+            f.seek(pos); chunk = f.read(); pos = f.tell()
+        return chunk.splitlines()
+
     try:
         while time.time() - t0 < timeout:
             hwnd = hwnd or find_window(proc.pid)
-            if os.path.exists(log):
-                with open(log, "r", encoding="utf-8", errors="replace") as f:
-                    f.seek(pos); chunk = f.read(); pos = f.tell()
-                for line in chunk.splitlines():
-                    if "KBDTEST " in line or "SONG_INDEX_BUILD" in line or re.search(r"Lua error|Error running|attempt to", line):
-                        txt = line.split("]", 1)[-1] if "KBDTEST" not in line else line[line.index("KBDTEST"):]
-                        lines_out.append(txt.strip())
-                        m = re.search(r"KBDTEST SHOT (\S+)", line)
-                        if m:
-                            time.sleep(0.25)
-                            hwnd = find_window(proc.pid) or hwnd
-                            p = os.path.join(out, f"{scenario}__{m.group(1)}.png")
-                            size = capture(hwnd, p) if hwnd else None
-                            shots[m.group(1)] = p
-                            lines_out.append(f"(captured {os.path.basename(p)} {size})")
-                        if re.search(r"KBDTEST DONE", line):
-                            status = "done"
-                        if re.search(r"KBDTEST EVENT start_pressed", line) and hwnd:
-                            # after the transition begins, grab where we ended up
-                            time.sleep(2.2)
-                            p = os.path.join(out, f"{scenario}__next_screen.png")
-                            capture(find_window(proc.pid) or hwnd, p); shots["next_screen"] = p
-                            lines_out.append("(captured next_screen)")
-                            status = "done"
-            if status == "done":
-                time.sleep(0.5); break
+            for line in read_new():
+                if not keep.search(line):
+                    continue
+                txt = line.split("]", 1)[-1] if "KBDTEST" not in line else line[line.index("KBDTEST"):]
+                lines_out.append(txt.strip())
+                m = re.search(r"KBDTEST SHOT (\S+)", line)
+                if m:
+                    time.sleep(0.25)
+                    hwnd = find_window(proc.pid) or hwnd
+                    p = os.path.join(out, f"{scenario}__{m.group(1)}.png")
+                    size = capture(hwnd, p) if hwnd else None
+                    shots[m.group(1)] = p
+                    lines_out.append(f"(captured {os.path.basename(p)} {size})")
+                if re.search(r"KBDTEST DONE", line):
+                    status = "done"
+                if re.search(r"KBDTEST EVENT (start_pressed|quick_play)", line):
+                    # the engine shows its options prompt first, then loads gameplay; grab where
+                    # we end up. Scheduled (not slept on) so SHOT lines in between are still
+                    # captured at the right moment.
+                    next_shot_at = time.time() + 3.6
+            if next_shot_at and time.time() >= next_shot_at and hwnd:
+                p = os.path.join(out, f"{scenario}__next_screen.png")
+                capture(find_window(proc.pid) or hwnd, p); shots["next_screen"] = p
+                lines_out.append("(captured next_screen)")
+                next_shot_at = None
+                status = "done"
+            if status == "done" and next_shot_at is None:
+                break
             if proc.poll() is not None:
                 status = "exited"; break
             time.sleep(0.15)
+        # trace lines written after the last poll (e.g. the results that follow a start event)
+        time.sleep(0.6)
+        for line in read_new():
+            if keep.search(line):
+                txt = line.split("]", 1)[-1] if "KBDTEST" not in line else line[line.index("KBDTEST"):]
+                lines_out.append(txt.strip())
     finally:
         if proc.poll() is None:
             proc.terminate()
             try: proc.wait(timeout=5)
             except Exception: proc.kill()
         if os.path.exists(flag): os.remove(flag)
+    recents = os.path.join(save, "KeyboardRecentSongs.txt")
+    rec = open(recents, encoding="utf-8", errors="replace").read().splitlines()[:3] if os.path.exists(recents) else []
+    for name, data in backups.items():
+        open(os.path.join(save, name), "wb").write(data)
+    for p in hidden:
+        os.replace(p + ".hidden", p)
     with open(os.path.join(out, f"{scenario}.log"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines_out) + "\n")
     # count module instance loads straight from the engine log
@@ -159,8 +217,6 @@ def run(root, scenario, out, timeout, stage_reset=True):
     if os.path.exists(log):
         txt = open(log, encoding="utf-8", errors="replace").read()
         loads = len(re.findall(r"Loading .*SongSearchEngine\.lua", txt))
-    recents = os.path.join(save, "KeyboardRecentSongs.txt")
-    rec = open(recents, encoding="utf-8", errors="replace").read().splitlines()[:3] if os.path.exists(recents) else []
     res = {"recents_head": rec, "scenario": scenario, "status": status, "lines": lines_out, "shots": shots,
            "song_index_module_loads": loads}
     json.dump(res, open(os.path.join(out, f"{scenario}.json"), "w"), indent=1)
@@ -171,8 +227,12 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True); ap.add_argument("--scenario", required=True)
     ap.add_argument("--out", required=True); ap.add_argument("--timeout", type=float, default=90)
+    ap.add_argument("--hide-save-file", action="append", default=[],
+                    help="Save/ file to move aside for the run (e.g. WindowsKeyboardLayout.lua)")
     a = ap.parse_args()
-    r = run(a.root, a.scenario, a.out, a.timeout)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    r = run(a.root, a.scenario, a.out, a.timeout, hide=a.hide_save_file)
     print(f"[{r['status']}] {a.scenario}: {len(r['lines'])} lines, shots={list(r['shots'])}, SongSearchEngine loads={r['song_index_module_loads']}")
     for l in r["lines"]:
         print("  ", l)

@@ -57,7 +57,10 @@ def main():
     if not a.host:
         sys.exit("--host (or DDR_HOST) is required")
 
-    ssh_opts = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no"]
+    # BatchMode: never prompt (a prompt hangs a non-interactive run). accept-new: record a host
+    # key the first time it is seen but REFUSE a changed key, so a swapped or spoofed host still
+    # fails loudly. StrictHostKeyChecking=no would accept any key, silently.
+    ssh_opts = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"]
     if a.key:
         ssh_opts += ["-i", a.key]
     if a.host_key_alias:

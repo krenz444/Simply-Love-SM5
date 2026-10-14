@@ -54,16 +54,93 @@ def main(d):
         post = [s for s in snaps if s["label"].startswith("start_")]
         check("start: engine song == highlighted row at Start", pre and pre[0]["synced"] == "true",
               f'highlighted={pre[0]["highlighted"]} engine={pre[0]["engine"]}' if pre else "")
-        check("start: input stays redirected for the whole fade-out",
-              post and all(s["redirP1"] == "true" and s["redirP2"] == "true" for s in post),
-              ", ".join(f'{s["label"]}:{s["redirP1"]}/{s["redirP2"]}' for s in post))
-        check("start: engine song unchanged during fade-out",
+        prompt = [kv(l) for l in L if "OPTIONS_PROMPT" in l]
+        check("start: engine ran MenuStart (\"Press START for options\" is shown)", bool(prompt),
+              "prompt shown" if prompt else "no options prompt: MenuStart was skipped")
+        check("start: engine finalized the selection (StartFinalized)",
+              any("START_FINALIZED" in l for l in L))
+        in_window = [s for s in post if s["label"] == "start_t+500ms"]
+        check("start: input is back with the engine during the prompt (a 2nd Start can open Player Options)",
+              in_window and in_window[0]["redirP1"] == "false" and in_window[0]["redirP2"] == "false",
+              ", ".join(f'{s["label"]}:{s["redirP1"]}/{s["redirP2"]}' for s in in_window))
+        check("start: engine song unchanged during the prompt",
               post and all(s["synced"] == "true" for s in post))
         j = json.load(open(os.path.join(d, "start.json")))
         head = (j.get("recents_head") or [""])[0]
         want = pre[0]["highlighted"].strip('"') if pre else ""
         check("start: started song is recorded in Recent Songs", want and norm(want) in norm(head),
               f"recents[0]={head}")
+
+    L = load(d, "omnibar_play")
+    if L is not None:
+        q = [kv(l) for l in L if "QUICKPLAY" in l]
+        check("omnibar quick play: engine ran MenuStart (options prompt shown)",
+              any("OPTIONS_PROMPT" in l for l in L),
+              "prompt shown" if any("OPTIONS_PROMPT" in l for l in L) else "no options prompt")
+        check("omnibar quick play: engine plays the searched song",
+              q and q[0]["engine"].strip('"') == "Danger Zone",
+              f'engine={q[0]["engine"]}' if q else "no line")
+
+    L = load(d, "reload")
+    if L is not None:
+        r2 = [kv(l) for l in L if "RELOAD stage=2" in l]
+        check("reload: after a full song reload the index does not hold freed songs",
+              r2 and r2[0]["first_song_is_live"] == "true",
+              f'first_song_is_live={r2[0]["first_song_is_live"]}' if r2 else "stage 2 never ran")
+        builds = [l for l in L if "SONG_INDEX_BUILD" in l]
+        check("reload: the index was rebuilt after the reload", len(builds) >= 2, f"{len(builds)} builds")
+
+    L = load(d, "played_fx")
+    if L is not None:
+        p = [kv(l) for l in L if "PLAYEDFX" in l]
+        check("played: building PLAYED inserts no score entries into the profile",
+              p and p[0]["entry_before"] == "false" and p[0]["entry_after"] == "false",
+              f'before={p[0]["entry_before"]} after={p[0]["entry_after"]}' if p else "no line")
+
+    L = load(d, "ctrl_l")
+    if L is not None:
+        rows = [kv(l) for l in L if "CTRL_L press=" in l]
+        check("ctrl+L: cycling layouts never errors without the Windows layout file",
+              rows and all(r["ok"] == "true" for r in rows),
+              " ".join(f'{r["press"]}:{r["layout"]}' for r in rows))
+        check("ctrl+L: it keeps cycling (never stuck on one layout)",
+              rows and len({r["layout"] for r in rows}) >= 3,
+              " ".join(r["layout"] for r in rows))
+
+    L = load(d, "ctrl_g")
+    if L is not None:
+        g = [kv(l) for l in L if "CTRL_G leaderboard_visible" in l]
+        check("ctrl+G: leaderboard opens with input redirected (Start/Back can dismiss it)",
+              g and g[0]["leaderboard_visible"] == "true" and g[0]["redirP1"] == "true",
+              f'visible={g[0]["leaderboard_visible"]} redirP1={g[0]["redirP1"]}' if g else "no line")
+        t = [kv(l) for l in L if "typing_opened_omnibar" in l]
+        check("ctrl+G: typing does not open the Omnibar on top of the leaderboard",
+              t and t[0]["typing_opened_omnibar"] == "false",
+              f'opened={t[0]["typing_opened_omnibar"]}' if t else "no line")
+
+    L = load(d, "jump_group")
+    if L is not None:
+        b = [kv(l) for l in L if "JUMP before" in l]
+        a = [kv(l) for l in L if "JUMP after" in l]
+        check("jump: ']' lands the engine on a song of the next pack",
+              a and b and a[0]["group"] == b[0]["expect_next"],
+              f'expected {b[0]["expect_next"]} got {a[0]["group"]}' if a and b else "no lines")
+        check("jump: the wheel is on a song (not a section header)",
+              a and a[0]["wheel_type"] == "WheelItemDataType_Song",
+              f'wheel_type={a[0]["wheel_type"]}' if a else "no line")
+        c = [kv(l) for l in L if "WHEELCENTER label=after_jump" in l]
+        check("jump: the wheel DISPLAYS that song (centre row shows the engine's song, not the pack header)",
+              c and c[0]["displayed_is_engine_song"] == "true",
+              f'displayed={c[0]["displayed"]} engine={c[0]["engine"]} center_type={c[0]["center_type"]}' if c else "no line")
+
+    for scen, label, what in (("exit_visual", "after_exit", "leaving Keyboard Mode"),
+                              ("omnibar_wheel", "after_omnibar_select", "an Omnibar search in wheel mode")):
+        L = load(d, scen)
+        if L is not None:
+            c = [kv(l) for l in L if f"WHEELCENTER label={label}" in l]
+            check(f"{scen}: the wheel DISPLAYS the engine's song after {what}",
+                  c and c[0]["displayed_is_engine_song"] == "true",
+                  f'displayed={c[0]["displayed"]} engine={c[0]["engine"]}' if c else "no line")
 
     L = load(d, "arbit")
     if L is not None:
@@ -83,6 +160,11 @@ def main(d):
         cat_ids = {c["cat"] for c in counts}
         check("cats: no placeholder categories (groovestats/search)",
               not (cat_ids & {"groovestats", "search"}), ",".join(sorted(cat_ids)))
+        total = next((int(c["n"]) for c in counts if c["cat"] == "packs" and c["chip"] == "all"), None)
+        az = [int(c["n"]) for c in counts if c["cat"] == "alphabet"]
+        if az and total is not None:
+            check("cats: A-Z buckets cover every song exactly once", sum(az) == total,
+                  f"sum(buckets)={sum(az)} library={total}")
         bpm = {c["chip"]: int(c["n"]) for c in counts if c["cat"] == "bpm"}
         if bpm:
             tiers = sum(v for k, v in bpm.items() if k != "all")
