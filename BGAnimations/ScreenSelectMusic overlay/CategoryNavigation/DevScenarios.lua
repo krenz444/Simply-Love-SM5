@@ -432,6 +432,73 @@ elseif name == "guard" then
 		report("restored")
 	end)
 	step(1.0, function() shot("guard_done") end)
+
+elseif name == "section_filter" then
+	step(1.0, function() landOnWheel("Danger Zone") end)
+	step(0.8, function() api.catnav.Enter() end)
+	step(0.5, function()
+		local st = api.catnav.State()
+		T('SECTION_FILTER initial active=%s total=%d unfil=%d query="%s"',
+			tostring(st.active), st.total or 0, st.unfilteredTotal or 0, st.filterQuery or "")
+	end)
+	-- Type "d" -> starts section filter
+	step(0.5, function()
+		api.catnav.Handle(ev("DeviceButton_d"))
+	end)
+	step(0.5, function()
+		local st = api.catnav.State()
+		T('SECTION_FILTER step=typed_d query="%s" total=%d unfil=%d selected="%s"',
+			st.filterQuery or "", st.total or 0, st.unfilteredTotal or 0, tostring(st.selectedTitle))
+	end)
+	-- Type "a" and "n" -> query becomes "dan"
+	step(0.3, function()
+		api.catnav.Handle(ev("DeviceButton_a"))
+	end)
+	step(0.3, function()
+		api.catnav.Handle(ev("DeviceButton_n"))
+	end)
+	step(0.5, function()
+		local st = api.catnav.State()
+		T('SECTION_FILTER step=typed_dan query="%s" total=%d unfil=%d selected="%s"',
+			st.filterQuery or "", st.total or 0, st.unfilteredTotal or 0, tostring(st.selectedTitle))
+	end)
+	-- BackSpace -> query becomes "da"
+	step(0.3, function()
+		api.catnav.Handle(ev("DeviceButton_backspace"))
+	end)
+	step(0.5, function()
+		local st = api.catnav.State()
+		T('SECTION_FILTER step=backspace query="%s" total=%d unfil=%d',
+			st.filterQuery or "", st.total or 0, st.unfilteredTotal or 0)
+	end)
+	-- Press Escape -> clears section filter, stays in keyboard mode
+	step(0.3, function()
+		api.catnav.Handle(ev("DeviceButton_escape"))
+	end)
+	step(0.5, function()
+		local st = api.catnav.State()
+		T('SECTION_FILTER step=escape_cleared active=%s query="%s" total=%d unfil=%d',
+			tostring(st.active), st.filterQuery or "", st.total or 0, st.unfilteredTotal or 0)
+	end)
+	-- Type "z" to filter again
+	step(0.3, function()
+		api.catnav.Handle(ev("DeviceButton_z"))
+	end)
+	step(0.3, function()
+		local st = api.catnav.State()
+		T('SECTION_FILTER step=typed_z query="%s"', st.filterQuery or "")
+	end)
+	-- Press "/" -> clears section filter AND opens Omnibar (global search)
+	step(0.3, function()
+		api.catnav.Handle(ev("DeviceButton_slash"))
+	end)
+	step(0.5, function()
+		local st = api.catnav.State()
+		local ob = api.omnibar.IsOpen()
+		T('SECTION_FILTER step=slash_omnibar omnibar_open=%s query="%s"',
+			tostring(ob), st.filterQuery or "")
+	end)
+	step(0.8, function() shot("section_filter_done") end)
 end
 
 local idx = 0

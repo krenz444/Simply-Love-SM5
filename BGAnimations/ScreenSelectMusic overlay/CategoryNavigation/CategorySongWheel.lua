@@ -341,10 +341,19 @@ local emptyStateAF = Def.ActorFrame {
 		self:visible(false)
 	end,
 	UpdateCategoryUIMessageCommand = function(self, params)
-		if not params or not params.songs or #params.songs == 0 then
+		local total = params and params.songs and #params.songs or 0
+		local query = params and params.filterQuery or ""
+		if total == 0 then
 			self:visible(true)
+			local tit = self:GetChild("EmptyTitle")
 			local sub = self:GetChild("EmptySubtitle")
-			sub:settext((params and params.emptyHint) or "No songs match this category filter.")
+			if #query > 0 then
+				if tit then tit:settext("NO MATCHES IN SECTION") end
+				if sub then sub:settext(string.format("No songs match \"%s\" in this section\n[ BackSpace ] Delete   •   [ Esc ] Clear   •   [ / ] Search All Songs", query)) end
+			else
+				if tit then tit:settext("NO SONGS FOUND") end
+				if sub then sub:settext((params and params.emptyHint) or "No songs match this category filter.") end
+			end
 		else
 			self:visible(false)
 		end
@@ -437,20 +446,39 @@ local hudAF = Def.ActorFrame {
 			if not params or not params.songs then return end
 			local total = #params.songs
 			local sel = params.selectedIdx or 1
-			if total == 0 then
-				if IsUsingWideScreen() then
-					self:settext("0 Songs   •   [ Tab ] Category   •   [ Left / Right ] Tabs   •   [ Esc ] Wheel")
+			local query = params.filterQuery or ""
+			if #query > 0 then
+				if total == 0 then
+					if IsUsingWideScreen() then
+						self:settext(string.format("NO MATCHES FOR \"%s\"   •   [ BackSpace ] Delete   •   [ Esc ] Clear Filter   •   [ / ] Search All Songs", query))
+					else
+						self:settext(string.format("NO MATCHES: \"%s\"   •   [ Bksp ] Del   •   [ Esc ] Clear   •   [ / ] All", query))
+					end
+					self:diffuse(color("#ff6666"))
 				else
-					self:settext("0 Songs   •   [ Tab ] Cat   •   [ L / R ] Tabs   •   [ Esc ] Wheel")
+					if IsUsingWideScreen() then
+						self:settext(string.format("FILTER: \"%s\" (%d of %d)   •   [ Enter ] Play   •   [ Up / Down ] Browse   •   [ BackSpace ] Delete   •   [ Esc ] Clear   •   [ / ] All Songs", query, sel, total))
+					else
+						self:settext(string.format("FILTER: \"%s\" (%d/%d)   •   [ Enter ] Play   •   [ Up/Dn ] Browse   •   [ Bksp ] Del   •   [ Esc ] Clear   •   [ / ] All", query, sel, total))
+					end
+					self:diffuse(color("#66ffcc"))
 				end
-				self:diffuse(color("#ffaa66"))
 			else
-				if IsUsingWideScreen() then
-					self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Down ] Browse   •   [ 1-5 ] Difficulty   •   [ Tab ] Category   •   [ Left / Right ] Tabs   •   [ Esc ] Wheel", sel, total))
+				if total == 0 then
+					if IsUsingWideScreen() then
+						self:settext("0 Songs   •   [ Tab ] Category   •   [ Left / Right ] Tabs   •   [ / ] Search All   •   [ Esc ] Wheel")
+					else
+						self:settext("0 Songs   •   [ Tab ] Cat   •   [ L / R ] Tabs   •   [ / ] All   •   [ Esc ] Wheel")
+					end
+					self:diffuse(color("#ffaa66"))
 				else
-					self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Up / Dn ] Browse   •   [ 1-5 ] Diff   •   [ Tab ] Cat   •   [ L / R ] Tabs   •   [ Esc ] Wheel", sel, total))
+					if IsUsingWideScreen() then
+						self:settext(string.format("Song %d of %d   •   [ Enter ] Play   •   [ Type ] Filter Section   •   [ / ] Search All   •   [ 1-5 ] Diff   •   [ Tab ] Tabs   •   [ Esc ] Wheel", sel, total))
+					else
+						self:settext(string.format("Song %d of %d   •   [ Type ] Filter   •   [ / ] All   •   [ 1-5 ] Diff   •   [ Tab ] Cat   •   [ Esc ] Wheel", sel, total))
+					end
+					self:diffuse(Color.White)
 				end
-				self:diffuse(Color.White)
 			end
 		end,
 	},

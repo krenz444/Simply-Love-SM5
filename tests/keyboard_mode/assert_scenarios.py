@@ -210,6 +210,33 @@ def main(d):
               b and b["humans"] == "1" and b["p2"] == "true",
               f'humans={b["humans"]} master={b["master"]}' if b else "")
 
+    L = load(d, "section_filter")
+    if L is not None:
+        init = [kv(l) for l in L if "SECTION_FILTER initial" in l]
+        check("section_filter: entered keyboard mode with empty filter",
+              init and init[0]["active"] == "true" and init[0]["query"] == '""',
+              f'query={init[0]["query"]}' if init else "no line")
+
+        dan = [kv(l) for l in L if "SECTION_FILTER step=typed_dan" in l]
+        check("section_filter: typing filters section songs in-place",
+              dan and dan[0]["query"] == '"dan"' and int(dan[0]["total"]) < int(dan[0]["unfil"]),
+              f'query={dan[0]["query"]} total={dan[0]["total"]} unfil={dan[0]["unfil"]}' if dan else "no line")
+
+        bksp = [kv(l) for l in L if "SECTION_FILTER step=backspace" in l]
+        check("section_filter: backspace deletes last character of query",
+              bksp and bksp[0]["query"] == '"da"',
+              f'query={bksp[0]["query"]}' if bksp else "no line")
+
+        esc = [kv(l) for l in L if "SECTION_FILTER step=escape_cleared" in l]
+        check("section_filter: escape clears filter and stays in keyboard mode",
+              esc and esc[0]["active"] == "true" and esc[0]["query"] == '""' and esc[0]["total"] == esc[0]["unfil"],
+              f'active={esc[0]["active"]} query={esc[0]["query"]} total={esc[0]["total"]}' if esc else "no line")
+
+        slash = [kv(l) for l in L if "SECTION_FILTER step=slash_omnibar" in l]
+        check("section_filter: '/' opens Omnibar for global search and resets section filter",
+              slash and slash[0]["omnibar_open"] == "true" and slash[0]["query"] == '""',
+              f'omnibar_open={slash[0]["omnibar_open"]} query={slash[0]["query"]}' if slash else "no line")
+
     width = max((len(n) for n, _, _ in results), default=0)
     ok_all = True
     for name, ok, detail in results:

@@ -18,6 +18,7 @@ local CategoryRibbon = LoadActor("CategoryRibbon.lua")
 local CategorySongWheel = LoadActor("CategorySongWheel.lua")
 local SongSearchEngine = CategoryEngine.GetSearchEngine()
 local WheelSync = LoadActor("../KeyboardOmnibar/WheelSync.lua")
+local KeyboardLayout = LoadActor("../KeyboardOmnibar/KeyboardLayout.lua")
 
 -- References to UI Actors
 local rootActor = nil
@@ -28,6 +29,8 @@ local wasNavActiveBeforeOmnibar = false
 local activeCategoryIdx = 1
 local activeSubChipIdx = 1
 local currentSongs = {}
+local unfilteredSongs = {}
+local filterQuery = ""
 local selectedSongIdx = 1
 local topVisibleIdx = 1
 local maxRows = 14
@@ -55,6 +58,7 @@ local categories = CategoryEngine.GetCategories()
 local CategoryInputHandler = nil
 local BroadcastUIState = nil
 local SyncCurrentSong = nil
+local ApplyFilter = nil
 local RefreshCategorySongs = nil
 local EnterKeyboardMode = nil
 local ExitKeyboardMode = nil
@@ -121,6 +125,72 @@ local function MenuTimerSecondsLeft()
 	return nil
 end
 
+-- Filter a list of songs by query (case-insensitive multi-token matching across title, artist, subtitle, folder)
+local function FilterSongList(songs, query)
+	if not query or query == "" then return songs end
+	local clean = query:lower():gsub("^%s*(.-)%s*$", "%1")
+	if clean == "" then return songs end
+
+	local tokens = {}
+	for tok in clean:gmatch("%S+") do
+		tokens[#tokens + 1] = tok
+	end
+	if #tokens == 0 then return songs end
+
+	local results = {}
+	for _, entry in ipairs(songs) do
+		local t = entry.title_lower or (entry.title and entry.title:lower()) or ""
+		local tt = entry.translit_lower or (entry.translit_title and entry.translit_title:lower()) or ""
+		local a = entry.artist_lower or (entry.artist and entry.artist:lower()) or ""
+		local ta = entry.translit_artist_lower or ""
+		local sub = entry.subtitle_lower or (entry.subtitle and entry.subtitle:lower()) or ""
+		local folder = entry.folder_lower or (entry.folder and entry.folder:lower()) or ""
+
+		local matchAll = true
+		for _, tok in ipairs(tokens) do
+			if not (t:find(tok, 1, true) or tt:find(tok, 1, true)
+				or a:find(tok, 1, true) or ta:find(tok, 1, true)
+				or sub:find(tok, 1, true) or folder:find(tok, 1, true)) then
+				matchAll = false
+				break
+			end
+		end
+
+		if matchAll then
+			results[#results + 1] = entry
+		end
+	end
+	return results
+end
+
+-- Apply the active section filter (or restore unfiltered list) and update the cursor and UI
+ApplyFilter = function(anchorSong, fallbackIdx)
+	if not filterQuery or filterQuery == "" then
+		currentSongs = unfilteredSongs
+	else
+		currentSongs = FilterSongList(unfilteredSongs, filterQuery)
+	end
+
+	local idx = nil
+	if anchorSong then
+		for i, entry in ipairs(currentSongs) do
+			if entry.song == anchorSong then idx = i break end
+		end
+	end
+	if not idx and fallbackIdx and #currentSongs > 0 then
+		idx = math.min(math.max(fallbackIdx, 1), #currentSongs)
+	end
+	selectedSongIdx = idx or 1
+	topVisibleIdx = ClampTop(selectedSongIdx)
+
+	local entry = currentSongs[selectedSongIdx]
+	if entry and entry.song then
+		SyncCurrentSong(entry.song)
+	end
+
+	BroadcastUIState()
+end
+
 -- Broadcast UI State to Ribbon and SongWheel
 BroadcastUIState = function()
 	local cat = categories[activeCategoryIdx]
@@ -137,6 +207,8 @@ BroadcastUIState = function()
 		subChips = subChips,
 		songs = currentSongs,
 		totalSongs = #currentSongs,
+		unfilteredTotal = #unfilteredSongs,
+		filterQuery = filterQuery,
 		selectedIdx = selectedSongIdx,
 		topIdx = topVisibleIdx,
 		meterMin = meterMin,
@@ -172,30 +244,14 @@ RefreshCategorySongs = function(anchorSong, fallbackIdx)
 	local subChips = CategoryEngine.GetSubChips(cat.id)
 	if activeSubChipIdx > #subChips then activeSubChipIdx = 1 end
 	local chip = subChips[activeSubChipIdx] or subChips[1]
-	currentSongs = CategoryEngine.GetSongs(cat.id, chip and chip.id or "all")
+	unfilteredSongs = CategoryEngine.GetSongs(cat.id, chip and chip.id or "all")
 
-	local idx = nil
-	if anchorSong then
-		for i, entry in ipairs(currentSongs) do
-			if entry.song == anchorSong then idx = i break end
-		end
-	end
-	if not idx and fallbackIdx and #currentSongs > 0 then
-		idx = math.min(math.max(fallbackIdx, 1), #currentSongs)
-	end
-	selectedSongIdx = idx or 1
-	topVisibleIdx = ClampTop(selectedSongIdx)
-
-	local entry = currentSongs[selectedSongIdx]
-	if entry and entry.song then
-		SyncCurrentSong(entry.song)
-	end
-
-	BroadcastUIState()
+	ApplyFilter(anchorSong, fallbackIdx)
 end
 
 -- Cycle Category
 local function CycleCategory(delta)
+	filterQuery = ""
 	local numSelectable = #categories
 	activeCategoryIdx = activeCategoryIdx + delta
 	if activeCategoryIdx < 1 then activeCategoryIdx = numSelectable end
@@ -207,6 +263,7 @@ end
 
 -- Cycle SubChip
 local function CycleSubChip(delta)
+	filterQuery = ""
 	local cat = categories[activeCategoryIdx]
 	if not cat then return end
 	local subChips = CategoryEngine.GetSubChips(cat.id)
@@ -291,6 +348,7 @@ end
 -- Enter Keyboard Mode (hide native wheel, show category navigation)
 EnterKeyboardMode = function(silent)
 	if isNavActive then return end
+	filterQuery = ""
 	SetNavActive(true)
 	lastTabTime = GetTimeSinceStart()
 	tabRepeatCount = 0
@@ -315,6 +373,7 @@ end
 -- Exit Keyboard Mode (hide category navigation, restore normal scroll wheel)
 ExitKeyboardMode = function()
 	if not isNavActive then return end
+	filterQuery = ""
 	SetNavActive(false)
 	lastTabTime = 0
 	tabRepeatCount = 0
@@ -577,17 +636,55 @@ CategoryInputHandler = function(event)
 	-- =========================================================
 	if isStarting then return true end
 
-	-- Escape / Back / F3: return to the Normal Scroll Wheel.
-	if btn == "DeviceButton_escape" or btn == "DeviceButton_f3" or event.GameButton == "Back" then
-		if eventType == "InputEventType_FirstPress" then ExitKeyboardMode() end
+	local logicalChar = KeyboardLayout.TranslateButton(btn, false)
+	local typedChar = KeyboardLayout.TranslateButton(btn, isShiftHeld)
+
+	-- Search Everything: "/", Ctrl+F or Ctrl+K open the full Omnibar (search across all songs)
+	if btn == "DeviceButton_slash" or btn == "DeviceButton_/" or logicalChar == "/" or typedChar == "/"
+		or (isCtrlHeld and (btn == "DeviceButton_f" or btn == "DeviceButton_F" or btn == "DeviceButton_k" or btn == "DeviceButton_K")) then
+		if eventType == "InputEventType_FirstPress" then
+			if #filterQuery > 0 then
+				filterQuery = ""
+				ApplyFilter()
+			end
+			MESSAGEMAN:Broadcast("OpenOmnibarWithQuery", { query = "" })
+		end
 		return true
 	end
 
-	-- Search: "/", Ctrl+F or Ctrl+K open the Omnibar.
-	if btn == "DeviceButton_slash"
-		or (isCtrlHeld and (btn == "DeviceButton_f" or btn == "DeviceButton_F" or btn == "DeviceButton_k" or btn == "DeviceButton_K")) then
+	-- Escape / Back / F3: return to Normal Scroll Wheel (or clear section filter if active)
+	if btn == "DeviceButton_escape" or btn == "DeviceButton_f3" or event.GameButton == "Back" then
 		if eventType == "InputEventType_FirstPress" then
-			MESSAGEMAN:Broadcast("OpenOmnibarWithQuery", { query = "" })
+			if #filterQuery > 0 then
+				filterQuery = ""
+				local cur = currentSongs[selectedSongIdx]
+				ApplyFilter(cur and cur.song, selectedSongIdx)
+				SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
+			else
+				ExitKeyboardMode()
+			end
+		end
+		return true
+	end
+
+	-- BackSpace / Delete: delete last character of section filter
+	if btn == "DeviceButton_backspace" or btn == "DeviceButton_delete" then
+		if eventType == "InputEventType_FirstPress" or eventType == "InputEventType_Repeat" then
+			if #filterQuery > 0 then
+				filterQuery = filterQuery:sub(1, -2)
+				local cur = currentSongs[selectedSongIdx]
+				ApplyFilter(cur and cur.song, selectedSongIdx)
+				SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
+				return true
+			end
+		end
+		return true
+	end
+
+	-- Ctrl+L: Cycle Keyboard Layout
+	if isCtrlHeld and (btn == "DeviceButton_l" or btn == "DeviceButton_L" or logicalChar == "l") then
+		if eventType == "InputEventType_FirstPress" then
+			KeyboardLayout.CycleLayout()
 		end
 		return true
 	end
@@ -604,6 +701,18 @@ CategoryInputHandler = function(event)
 			else
 				BroadcastUIState()
 			end
+		end
+		return true
+	end
+
+	-- Direct Difficulty Selection via 1-5 (top row or numpad)
+	local numKey = btn:match("^DeviceButton_([1-5])$")
+		or btn:match("^DeviceButton_[kK][pP]%s*([1-5])$")
+		or btn:match("^DeviceButton_[nN][uU][mM]%s*([1-5])$")
+		or btn:match("^([1-5])$")
+	if numKey and (isCtrlHeld or #filterQuery == 0) then
+		if eventType == "InputEventType_FirstPress" then
+			SetDifficultyDirect(numKey)
 		end
 		return true
 	end
@@ -667,23 +776,35 @@ CategoryInputHandler = function(event)
 		return true
 	end
 
-	-- Number keys 1-5 (top row or numpad): Direct Difficulty Selection
-	local numKey = btn:match("^DeviceButton_([1-5])$")
-		or btn:match("^DeviceButton_[kK][pP]%s*([1-5])$")
-		or btn:match("^DeviceButton_[nN][uU][mM]%s*([1-5])$")
-		or btn:match("^([1-5])$")
-	if numKey then
-		SetDifficultyDirect(numKey)
-		return true
-	end
-
 	-- Enter / Start
 	if btn == "DeviceButton_enter" or event.GameButton == "Start" then
 		if eventType == "InputEventType_FirstPress" then StartSelectedSong() end
 		return true
 	end
 
-	-- All other keys (like A-Z letters for instant type-to-search) pass through
+	-- Type-to-Filter on the Current Section:
+	-- When filter is not active: letters [a-zA-Z] or other non-1..5 characters start the filter.
+	-- When filter is active: any printable character (including digits 0-9, space, punctuation) appends to the filter.
+	if not isCtrlHeld and typedChar and #typedChar == 1 and (eventType == "InputEventType_FirstPress" or eventType == "InputEventType_Repeat") then
+		if #filterQuery == 0 then
+			if typedChar:match("^[%w%-%_%.%'\"]$") and not typedChar:match("^[1-5]$") then
+				filterQuery = typedChar
+				local cur = currentSongs[selectedSongIdx]
+				ApplyFilter(cur and cur.song, 1)
+				SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
+				return true
+			end
+		else
+			if typedChar:match("^[%w%s%-%_%.%'\"]$") then
+				filterQuery = filterQuery .. typedChar
+				local cur = currentSongs[selectedSongIdx]
+				ApplyFilter(cur and cur.song, selectedSongIdx)
+				SOUND:PlayOnce(THEME:GetPathS("ScreenSelectMusic", "select down"))
+				return true
+			end
+		end
+	end
+
 	return false
 end
 
@@ -701,11 +822,17 @@ SL.Global.KbdModeAPI.catnav = {
 	SetCategory = function(catIdx, chipIdx)
 		activeCategoryIdx = catIdx
 		activeSubChipIdx = chipIdx or 1
+		filterQuery = ""
 		RefreshCategorySongs()
+	end,
+	Filter = function(q)
+		filterQuery = q or ""
+		ApplyFilter()
 	end,
 	State = function()
 		local e = currentSongs[selectedSongIdx]
 		return { active = isNavActive, selectedIdx = selectedSongIdx, total = #currentSongs,
+			unfilteredTotal = #unfilteredSongs, filterQuery = filterQuery,
 			selectedTitle = e and e.title or nil, categoryIdx = activeCategoryIdx, chipIdx = activeSubChipIdx }
 	end,
 }

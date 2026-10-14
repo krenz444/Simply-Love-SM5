@@ -533,4 +533,79 @@ end
 
 af[#af + 1] = chipsContainer
 
+-- -------------------------------------------------------------
+-- Section Filter Pill (y = 16, height = 20, spans y = 6..26)
+-- Positioned cleanly above Tier 1 Tabs when type-to-filter is active
+-- -------------------------------------------------------------
+local filterPill = Def.ActorFrame {
+	Name = "SectionFilterPill",
+	InitCommand = function(self)
+		self:y(16)
+		self:visible(false)
+	end,
+	UpdateCategoryUIMessageCommand = function(self, params)
+		local query = params and params.filterQuery or ""
+		if #query == 0 then
+			self:visible(false)
+			return
+		end
+		self:visible(true)
+		local total = params.songs and #params.songs or 0
+		local unfilTotal = params.unfilteredTotal or total
+		local lbl = self:GetChild("FilterText")
+		local border = self:GetChild("PillBorder")
+
+		if lbl then
+			if total == 0 then
+				if IsUsingWideScreen() then
+					lbl:settext(string.format("FILTER: \"%s\"   (0 of %d matches)   •   [ BackSpace ] Delete   •   [ Esc ] Clear", query, unfilTotal))
+				else
+					lbl:settext(string.format("FILTER: \"%s\" (0/%d) • [Bksp] Del • [Esc] Clear", query, unfilTotal))
+				end
+				lbl:diffuse(color("#ff7777"))
+				if border then border:diffuse(color("#ff4444")):diffusealpha(0.85) end
+			else
+				if IsUsingWideScreen() then
+					lbl:settext(string.format("FILTER: \"%s\"   (%d of %d songs)   •   [ BackSpace ] Delete   •   [ Esc ] Clear", query, total, unfilTotal))
+				else
+					lbl:settext(string.format("FILTER: \"%s\" (%d/%d) • [Bksp] Del • [Esc] Clear", query, total, unfilTotal))
+				end
+				lbl:diffuse(Color.White)
+				if border then border:diffuse(color("#66ffcc")):diffusealpha(0.85) end
+			end
+		end
+	end,
+
+	-- Outer pill border
+	Def.Quad {
+		Name = "PillBorder",
+		InitCommand = function(self)
+			self:zoomto(ribbonW - 16, 20)
+			self:diffuse(color("#66ffcc")):diffusealpha(0.85)
+		end,
+	},
+	-- Inner pill background
+	Def.Quad {
+		Name = "PillBg",
+		InitCommand = function(self)
+			self:zoomto(ribbonW - 18, 18)
+			self:diffuse(color("0.05, 0.07, 0.10, 0.98"))
+		end,
+	},
+	-- Pill text
+	LoadFont("Common Normal") .. {
+		Name = "FilterText",
+		InitCommand = function(self)
+			self:zoom(IsUsingWideScreen() and 0.44 or 0.36)
+			self:maxwidth((ribbonW - 28) / (IsUsingWideScreen() and 0.44 or 0.36))
+			self:diffuse(Color.White)
+			self:shadowlength(0)
+			self:settext("")
+		end,
+	},
+}
+
+af[#af + 1] = filterPill
+
 return af
+
