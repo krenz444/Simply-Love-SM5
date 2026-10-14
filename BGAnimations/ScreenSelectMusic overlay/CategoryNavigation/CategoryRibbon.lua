@@ -101,13 +101,14 @@ for i = 1, numTabs do
 			Name = "TabLabel",
 			InitCommand = function(self)
 				self:y(-1)
-				self:zoom(0.44)
-				self:shadowlength(0)
+				self:zoom(0.52)
+				self:shadowlength(1)
+				self:maxwidth((tabSpacing - 4) / 0.52)
 				self:settext(cat.name)
 				if i == 1 then
 					self:diffuse(Color.White)
 				else
-					self:diffuse(color("#778899"))
+					self:diffuse(color("#a8bdd4"))
 				end
 			end,
 			UpdateCategoryUIMessageCommand = function(self, params)
@@ -115,7 +116,7 @@ for i = 1, numTabs do
 					if i == params.categoryIdx then
 						self:diffuse(Color.White)
 					else
-						self:diffuse(color("#778899"))
+						self:diffuse(color("#a8bdd4"))
 					end
 				end
 			end,
@@ -132,8 +133,8 @@ af[#af + 1] = tabContainer
 -- Visual segmented tabs with prominent Left/Right arrow keycaps
 -- -------------------------------------------------------------
 local maxVisualTabs = 9
-local keyW = IsUsingWideScreen() and 44 or 36
-local keyTextZoom = IsUsingWideScreen() and 0.37 or 0.30
+local keyW = IsUsingWideScreen() and 48 or 40
+local keyTextZoom = IsUsingWideScreen() and 0.44 or 0.36
 local leftKeyX = -ribbonW / 2 + keyW / 2 + 2
 local rightKeyX = ribbonW / 2 - keyW / 2 - 2
 local tabAreaW = (rightKeyX - keyW / 2 - 3) - (leftKeyX + keyW / 2 + 3)
@@ -254,7 +255,7 @@ local chipsContainer = Def.ActorFrame {
 			InitCommand = function(self)
 				self:y(-0.5)
 				self:zoom(keyTextZoom)
-				self:shadowlength(0)
+				self:shadowlength(1)
 				self:diffuse(color("#eef4ff"))
 				self:settext("<  Left")
 			end,
@@ -302,7 +303,7 @@ local chipsContainer = Def.ActorFrame {
 			InitCommand = function(self)
 				self:y(-0.5)
 				self:zoom(keyTextZoom)
-				self:shadowlength(0)
+				self:shadowlength(1)
 				self:diffuse(color("#eef4ff"))
 				self:settext("Right  >")
 			end,
@@ -348,9 +349,9 @@ for slot = 1, maxVisualTabs do
 			Name = "TabLabel",
 			InitCommand = function(self)
 				self:y(-0.5)
-				self:zoom(0.36)
-				self:shadowlength(0)
-				self:diffuse(color("#8899aa"))
+				self:zoom(0.40)
+				self:shadowlength(1)
+				self:diffuse(color("#a8bdd4"))
 				self:settext("")
 			end,
 		},
@@ -396,7 +397,8 @@ local function UpdateVisualTabs(self, params)
 			local w = tabAreaW - 4
 			bg:zoomto(w, 13):diffuse(themeColor):diffusealpha(0.85)
 			glow:y(-5.5):zoomto(w, 1):diffuse(Color.White):diffusealpha(0.7)
-			lbl:zoom(0.35):diffuse(Color.White):maxwidth((w - 8) / 0.35)
+			local aZoom = IsUsingWideScreen() and 0.46 or 0.38
+			lbl:zoom(aZoom):diffuse(Color.White):shadowlength(1):maxwidth((w - 8) / aZoom)
 			lbl:settext(string.format("%s  (%d songs)", chip.label or "", totalSongs))
 		end
 		return
@@ -446,8 +448,9 @@ local function UpdateVisualTabs(self, params)
 					bg:diffuse(themeColor):diffusealpha(0.90)
 					glow:diffuse(Color.White):diffusealpha(0.8)
 					lbl:diffuse(Color.White)
-					local activeZoom = IsUsingWideScreen() and 0.38 or 0.30
+					local activeZoom = IsUsingWideScreen() and 0.46 or 0.38
 					lbl:zoom(activeZoom)
+					lbl:shadowlength(1)
 					lbl:maxwidth((quadW - 4) / activeZoom)
 					local txt = ""
 					if catId == "meters" then
@@ -460,9 +463,10 @@ local function UpdateVisualTabs(self, params)
 				else
 					bg:diffuse(color("0.10, 0.12, 0.16, 0.85"))
 					glow:diffuse(color("0.25, 0.28, 0.35, 0.35"))
-					lbl:diffuse(color("#8899aa"))
-					local inactiveZoom = IsUsingWideScreen() and 0.36 or 0.28
+					lbl:diffuse(color("#a8bdd4"))
+					local inactiveZoom = IsUsingWideScreen() and 0.40 or 0.32
 					lbl:zoom(inactiveZoom)
+					lbl:shadowlength(1)
 					lbl:maxwidth((quadW - 4) / inactiveZoom)
 					local sLbl = GetChipShortLabel(catId, chip)
 					lbl:settext(sLbl)
@@ -504,16 +508,18 @@ local function UpdateVisualTabs(self, params)
 				bg:diffuse(themeColor):diffusealpha(0.90)
 				glow:diffuse(Color.White):diffusealpha(0.8)
 				lbl:diffuse(Color.White)
-				local cZoom = IsUsingWideScreen() and 0.38 or 0.30
+				local cZoom = IsUsingWideScreen() and 0.46 or 0.38
 				lbl:zoom(cZoom)
+				lbl:shadowlength(1)
 				lbl:maxwidth((quadW - 6) / cZoom)
 				lbl:settext(string.format("[%d/%d]  %s (%d)", activeIdx, numChips, chip.label or "", totalSongs))
 			else
 				bg:diffuse(color("0.10, 0.12, 0.16, 0.85"))
 				glow:diffuse(color("0.25, 0.28, 0.35, 0.35"))
-				lbl:diffuse(color("#778899"))
-				local sZoom = IsUsingWideScreen() and 0.35 or 0.28
+				lbl:diffuse(color("#a8bdd4"))
+				local sZoom = IsUsingWideScreen() and 0.40 or 0.32
 				lbl:zoom(sZoom)
+				lbl:shadowlength(1)
 				lbl:maxwidth((quadW - 4) / sZoom)
 				lbl:settext(chip.label or "")
 			end
@@ -596,10 +602,10 @@ local filterPill = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		Name = "FilterText",
 		InitCommand = function(self)
-			self:zoom(IsUsingWideScreen() and 0.44 or 0.36)
-			self:maxwidth((ribbonW - 28) / (IsUsingWideScreen() and 0.44 or 0.36))
+			self:zoom(IsUsingWideScreen() and 0.52 or 0.42)
+			self:maxwidth((ribbonW - 28) / (IsUsingWideScreen() and 0.52 or 0.42))
 			self:diffuse(Color.White)
-			self:shadowlength(0)
+			self:shadowlength(1)
 			self:settext("")
 		end,
 	},

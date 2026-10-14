@@ -127,19 +127,19 @@ for r = 1, maxRows do
 			if isSelected then
 				cardBg:diffuse(color("0.13, 0.17, 0.26, 0.98"))
 				titleText:diffuse(Color.White)
-				titleText:zoom(0.52)
-				subText:diffuse(color("#ccddee"))
-				subText:zoom(0.42)
+				titleText:zoom(0.58)
+				subText:diffuse(color("#ddeeff"))
+				subText:zoom(0.46)
 				bpmLengthText:diffuse(Color.White)
-				bpmLengthText:zoom(0.44)
+				bpmLengthText:zoom(0.48)
 			else
 				cardBg:diffuse(color("0.06, 0.08, 0.12, 0.90"))
-				titleText:diffuse(color("#c8d6e5"))
-				titleText:zoom(0.52)
-				subText:diffuse(color("#8fa3b8"))
-				subText:zoom(0.42)
-				bpmLengthText:diffuse(color("#8fa3b8"))
-				bpmLengthText:zoom(0.44)
+				titleText:diffuse(color("#e2ecf7"))
+				titleText:zoom(0.58)
+				subText:diffuse(color("#adc4db"))
+				subText:zoom(0.46)
+				bpmLengthText:diffuse(color("#adc4db"))
+				bpmLengthText:zoom(0.48)
 			end
 
 			titleText:settext(entry.title or "")
@@ -209,78 +209,78 @@ for r = 1, maxRows do
 			end,
 		},
 
-		-- Favorite Glowing Gold Border around Meter Badge (28x22px)
+		-- Favorite Glowing Gold Border around Meter Badge (30x23px)
 		Def.Quad {
 			Name = "FavBadgeBorder",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 18)
-				self:zoomto(28, 22)
+				self:zoomto(30, 23)
 				self:diffuse(color("#ffd700"))
 				self:visible(false)
 			end,
 		},
 
-		-- Difficulty Meter Badge Quad (24x18px compact)
+		-- Difficulty Meter Badge Quad (26x19px compact)
 		Def.Quad {
 			Name = "MeterBadgeBg",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 18)
-				self:zoomto(24, 18)
+				self:zoomto(26, 19)
 				self:diffuse(color("0.15, 0.18, 0.26, 1.0"))
 			end,
 		},
 
-		-- Difficulty Meter Text (zoom 0.46)
+		-- Difficulty Meter Text (zoom 0.58)
 		LoadFont("Common Normal") .. {
 			Name = "MeterText",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 18)
-				self:zoom(0.46)
-				self:shadowlength(0)
+				self:zoom(0.58)
+				self:shadowlength(1)
 				self:diffuse(Color.White)
 				self:settext("")
 			end,
 		},
 
-		-- Song Title (zoom 0.49)
+		-- Song Title (zoom 0.58)
 		LoadFont("Common Normal") .. {
 			Name = "TitleText",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 38)
 				self:y(-5.5)
 				self:horizalign(left)
-				self:zoom(0.52)
-				self:maxwidth((wheelW - 150) / 0.52)
+				self:zoom(0.58)
+				self:maxwidth((wheelW - 150) / 0.58)
 				self:diffuse(Color.White)
-				self:shadowlength(0)
+				self:shadowlength(1)
 				self:settext("")
 			end,
 		},
 
-		-- Artist & Pack Subtitle (zoom 0.35)
+		-- Artist & Pack Subtitle (zoom 0.46)
 		LoadFont("Common Normal") .. {
 			Name = "SubText",
 			InitCommand = function(self)
 				self:x(-wheelW / 2 + 38)
 				self:y(6)
 				self:horizalign(left)
-				self:zoom(0.42)
-				self:maxwidth((wheelW - 150) / 0.42)
-				self:diffuse(color("#8fa3b8"))
-				self:shadowlength(0)
+				self:zoom(0.46)
+				self:maxwidth((wheelW - 150) / 0.46)
+				self:diffuse(color("#adc4db"))
+				self:shadowlength(1)
 				self:settext("")
 			end,
 		},
 
-		-- BPM & Length (Right aligned, zoom 0.38)
+		-- BPM & Length (Right aligned, zoom 0.48)
 		LoadFont("Common Normal") .. {
 			Name = "BpmLengthText",
 			InitCommand = function(self)
 				self:x(wheelW / 2 - 8)
 				self:horizalign(right)
-				self:zoom(0.44)
-				self:diffuse(color("#8fa3b8"))
-				self:shadowlength(0)
+				self:zoom(0.48)
+				self:diffuse(color("#adc4db"))
+				self:shadowlength(1)
 				self:settext("")
 			end,
 		},
@@ -378,9 +378,9 @@ local emptyStateAF = Def.ActorFrame {
 		Name = "EmptyTitle",
 		InitCommand = function(self)
 			self:y(-14)
-			self:zoom(0.66)
+			self:zoom(0.74)
 			self:diffuse(color("#ffaa55"))
-			self:shadowlength(0)
+			self:shadowlength(1)
 			self:settext("NO SONGS FOUND")
 		end,
 	},
@@ -389,9 +389,9 @@ local emptyStateAF = Def.ActorFrame {
 		Name = "EmptySubtitle",
 		InitCommand = function(self)
 			self:y(14)
-			self:zoom(0.44)
-			self:diffuse(color("#8899aa"))
-			self:shadowlength(0)
+			self:zoom(0.52)
+			self:diffuse(color("#b8cce0"))
+			self:shadowlength(1)
 			self:settext("")
 		end,
 	},
@@ -445,11 +445,11 @@ local hudAF = Def.ActorFrame {
 			self:y(0)
 			self:horizalign(center)
 			self:vertalign(middle)
-			self:zoom(IsUsingWideScreen() and 0.48 or 0.42)
+			self:zoom(IsUsingWideScreen() and 0.52 or 0.44)
 			self:vertspacing(-1)
 			self:shadowlength(1)
 			self:diffuse(Color.White)
-			self:maxwidth((leftBarW - 16) / (IsUsingWideScreen() and 0.48 or 0.42))
+			self:maxwidth((leftBarW - 16) / (IsUsingWideScreen() and 0.52 or 0.44))
 			self:settext("")
 		end,
 		UpdateCategoryUIMessageCommand = function(self, params)

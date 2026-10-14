@@ -831,7 +831,8 @@ local modal = Def.ActorFrame {
 		InitCommand = function(self)
 			self:xy(-boxWidth / 2 + 20, -boxHeight / 2 + 25)
 			self:horizalign(left)
-			self:zoom(0.55)
+			self:zoom(0.60)
+			self:shadowlength(1)
 			self:diffuse(GetCurrentColor())
 			self:settext("SEARCH:")
 		end,
@@ -869,9 +870,10 @@ local modal = Def.ActorFrame {
 			placeholderTextActor = self
 			self:xy(inputStartX + 10, -boxHeight / 2 + 25)
 			self:horizalign(left)
-			self:zoom(0.60)
-			self:maxwidth((inputW - 20) / 0.60)
-			self:diffuse(color("#556677"))
+			self:zoom(0.64)
+			self:shadowlength(1)
+			self:maxwidth((inputW - 20) / 0.64)
+			self:diffuse(color("#778899"))
 			self:settext("Type song, artist, pack, or diff (d:10)...")
 		end,
 	},
@@ -885,8 +887,9 @@ local modal = Def.ActorFrame {
 			queryTextActor = self
 			self:xy(inputStartX + 10, -boxHeight / 2 + 25)
 			self:horizalign(left)
-			self:zoom(0.72)
-			self:maxwidth((inputW - 20) / 0.72)
+			self:zoom(0.76)
+			self:shadowlength(1)
+			self:maxwidth((inputW - 20) / 0.76)
 			self:diffuse(Color.White)
 			self:settext("")
 		end,
@@ -899,7 +902,8 @@ local modal = Def.ActorFrame {
 			countTextActor = self
 			self:xy(boxWidth / 2 - 20, -boxHeight / 2 + 25)
 			self:horizalign(right)
-			self:zoom(0.68)
+			self:zoom(0.72)
+			self:shadowlength(1)
 			self:diffuse(color("#88aaff"))
 			self:settext("0 Results")
 		end,
@@ -911,8 +915,9 @@ local modal = Def.ActorFrame {
 		InitCommand = function(self)
 			noResultsActor = self
 			self:xy(-boxWidth / 4 + 20, 0)
-			self:zoom(0.72)
-			self:diffuse(color("#8899aa"))
+			self:zoom(0.76)
+			self:shadowlength(1)
+			self:diffuse(color("#adc4db"))
 			self:visible(false)
 		end,
 	},
@@ -929,8 +934,9 @@ local modal = Def.ActorFrame {
 	LoadFont("Common Normal") .. {
 		InitCommand = function(self)
 			self:xy(0, boxHeight / 2 - 16)
-			self:zoom(0.56)
-			self:diffuse(color("#bbbbbb"))
+			self:zoom(0.60)
+			self:shadowlength(1)
+			self:diffuse(color("#dddddd"))
 			self:settext("[ ↑ / ↓ ] Navigate   |   [ Ctrl+↑ / ↓ ] History   |   [ Enter ] Select   |   [ Esc ] Close")
 		end,
 	},
@@ -987,10 +993,11 @@ for r = 1, maxRows do
 				rowActors[r].title = self
 				self:xy(10, 0)
 				self:horizalign(left)
-				self:zoom(0.68)
+				self:zoom(0.72)
 				local maxW = IsUsingWideScreen() and 170 or 125
-				self:maxwidth(maxW / 0.68)
+				self:maxwidth(maxW / 0.72)
 				self:diffuse(Color.White)
+				self:shadowlength(1)
 			end,
 		},
 
@@ -1001,10 +1008,11 @@ for r = 1, maxRows do
 				local xA = IsUsingWideScreen() and 190 or 140
 				self:xy(xA, 0)
 				self:horizalign(left)
-				self:zoom(0.58)
+				self:zoom(0.62)
 				local maxW = IsUsingWideScreen() and 90 or 65
-				self:maxwidth(maxW / 0.58)
-				self:diffuse(color("#aaaaaa"))
+				self:maxwidth(maxW / 0.62)
+				self:diffuse(color("#cccccc"))
+				self:shadowlength(1)
 			end,
 		},
 
@@ -1015,10 +1023,11 @@ for r = 1, maxRows do
 				local xG = IsUsingWideScreen() and 290 or 210
 				self:xy(xG, 0)
 				self:horizalign(left)
-				self:zoom(0.52)
+				self:zoom(0.56)
 				local maxW = IsUsingWideScreen() and 90 or 65
-				self:maxwidth(maxW / 0.52)
-				self:diffuse(color("#77bbff"))
+				self:maxwidth(maxW / 0.56)
+				self:diffuse(color("#88ccff"))
+				self:shadowlength(1)
 			end,
 		},
 
@@ -1029,9 +1038,10 @@ for r = 1, maxRows do
 				local xB = IsUsingWideScreen() and 420 or 310
 				self:xy(xB, 0)
 				self:horizalign(right)
-				self:zoom(0.52)
-				self:maxwidth(45 / 0.52)
-				self:diffuse(color("#bbbbbb"))
+				self:zoom(0.56)
+				self:maxwidth(45 / 0.56)
+				self:diffuse(color("#dddddd"))
+				self:shadowlength(1)
 			end,
 		},
 
@@ -1042,9 +1052,10 @@ for r = 1, maxRows do
 				local xD = IsUsingWideScreen() and 492 or 372
 				self:xy(xD, 0)
 				self:horizalign(right)
-				self:zoom(0.52)
-				self:maxwidth(65 / 0.52)
+				self:zoom(0.56)
+				self:maxwidth(65 / 0.56)
 				self:diffuse(GetCurrentColor())
+				self:shadowlength(1)
 			end,
 			ColorSelectedMessageCommand = function(self)
 				self:diffuse(GetCurrentColor())

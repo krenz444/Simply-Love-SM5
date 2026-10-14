@@ -124,9 +124,9 @@ local topPill = Def.ActorFrame {
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
 				self:x(10)
-				self:zoom(0.56)
+				self:zoom(0.58)
 				self:diffuse(Color.White)
-				self:shadowlength(0)
+				self:shadowlength(1)
 				self:settext("Search")
 			end,
 		},
@@ -166,10 +166,10 @@ local topPill = Def.ActorFrame {
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
 				self:x(IsUsingWideScreen() and 14 or 10)
-				self:zoom(IsUsingWideScreen() and 0.44 or 0.36)
-				self:maxwidth((topPillW / 2 - (IsUsingWideScreen() and 34 or 28)) / (IsUsingWideScreen() and 0.44 or 0.36))
+				self:zoom(IsUsingWideScreen() and 0.50 or 0.42)
+				self:maxwidth((topPillW / 2 - (IsUsingWideScreen() and 34 or 28)) / (IsUsingWideScreen() and 0.50 or 0.42))
 				self:diffuse(Color.White)
-				self:shadowlength(0)
+				self:shadowlength(1)
 				self:settext("Keyboard Mode")
 			end,
 		},
