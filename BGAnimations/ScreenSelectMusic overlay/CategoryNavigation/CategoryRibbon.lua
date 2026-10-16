@@ -360,10 +360,174 @@ end
 
 chipsContainer[#chipsContainer + 1] = tabsGroup
 
+-- -------------------------------------------------------------
+-- In-Place Active Filter Bar (replaces Tier 2 visual tabs while typing)
+-- -------------------------------------------------------------
+local activeFilterBar = Def.ActorFrame {
+	Name = "ActiveFilterBar",
+	InitCommand = function(self)
+		self:visible(false)
+	end,
+	SetCommand = function(self, params)
+		if not params then return end
+		local query = params.filterQuery or ""
+		local total = params.songs and #params.songs or 0
+		local unfilTotal = params.unfilteredTotal or total
+		local isMatch = (total > 0)
+		local themeColor = GetCurrentColor()
+
+		local bg = self:GetChild("FilterBg")
+		local border = self:GetChild("FilterBorder")
+		local glow = self:GetChild("FilterTopGlow")
+		local leftText = self:GetChild("FilterLeftText")
+		local rightText = self:GetChild("FilterRightText")
+
+		if isMatch then
+			if bg then bg:diffuse(color("0.05, 0.08, 0.13, 0.98")) end
+			if border then border:diffuse(themeColor):diffusealpha(0.85) end
+			if glow then glow:diffuse(Color.White):diffusealpha(0.75) end
+		else
+			if bg then bg:diffuse(color("0.16, 0.05, 0.05, 0.98")) end
+			if border then border:diffuse(color("#ff4444")):diffusealpha(0.95) end
+			if glow then glow:diffuse(color("#ff8888")):diffusealpha(0.85) end
+		end
+
+		if leftText then
+			leftText:settext(string.format("FILTER:  \"%s_\"", query))
+			leftText:diffuse(Color.White)
+		end
+
+		if rightText then
+			local rStr = ""
+			if IsUsingWideScreen() then
+				if isMatch then
+					rStr = string.format("(%d of %d songs)   •   [Bksp] Del   [Esc] Clear   [/] All", total, unfilTotal)
+					rightText:diffuse(color("#66ffcc"))
+				else
+					rStr = string.format("(0 of %d matches)   •   [Bksp] Del   [Esc] Clear   [/] All", unfilTotal)
+					rightText:diffuse(color("#ff7777"))
+				end
+			else
+				if isMatch then
+					rStr = string.format("(%d/%d) • [Bksp] [Esc] Clear", total, unfilTotal)
+					rightText:diffuse(color("#66ffcc"))
+				else
+					rStr = string.format("(0/%d) • [Bksp] [Esc] Clear", unfilTotal)
+					rightText:diffuse(color("#ff7777"))
+				end
+			end
+			rightText:settext(rStr)
+		end
+	end,
+	ColorSelectedMessageCommand = function(self)
+		if lastCategoryUIParams and lastCategoryUIParams.filterQuery and #lastCategoryUIParams.filterQuery > 0 then
+			self:playcommand("Set", lastCategoryUIParams)
+		end
+	end,
+
+	-- Outer Border Quad
+	Def.Quad {
+		Name = "FilterBorder",
+		InitCommand = function(self)
+			self:zoomto(ribbonW - 4, 16)
+			self:diffuse(GetCurrentColor()):diffusealpha(0.85)
+		end,
+	},
+
+	-- Dark Inner Background Quad
+	Def.Quad {
+		Name = "FilterBg",
+		InitCommand = function(self)
+			self:zoomto(ribbonW - 6, 14)
+			self:diffuse(color("0.05, 0.08, 0.13, 0.98"))
+		end,
+	},
+
+	-- Top Glow Accent Line
+	Def.Quad {
+		Name = "FilterTopGlow",
+		InitCommand = function(self)
+			self:y(-5.5)
+			self:zoomto(ribbonW - 6, 1)
+			self:diffuse(Color.White):diffusealpha(0.75)
+		end,
+	},
+
+	-- Bottom Shadow Accent Line
+	Def.Quad {
+		Name = "FilterBottomShadow",
+		InitCommand = function(self)
+			self:y(5.5)
+			self:zoomto(ribbonW - 6, 1)
+			self:diffuse(color("0.02, 0.03, 0.05, 0.95"))
+		end,
+	},
+
+	-- Left Text: FILTER: "query_"
+	LoadFont("Common Normal") .. {
+		Name = "FilterLeftText",
+		InitCommand = function(self)
+			local lx = -ribbonW / 2 + (IsUsingWideScreen() and 10 or 6)
+			self:x(lx)
+			self:y(-0.5)
+			self:horizalign(left)
+			local z = IsUsingWideScreen() and 0.44 or 0.36
+			self:zoom(z)
+			self:shadowlength(1)
+			self:diffuse(Color.White)
+			local maxW = (ribbonW * 0.48) / z
+			self:maxwidth(maxW)
+			self:settext("")
+		end,
+	},
+
+	-- Right Text: (X of Y songs) • [Bksp] Del • [Esc] Clear • [/] All
+	LoadFont("Common Normal") .. {
+		Name = "FilterRightText",
+		InitCommand = function(self)
+			local rx = ribbonW / 2 - (IsUsingWideScreen() and 10 or 6)
+			self:x(rx)
+			self:y(-0.5)
+			self:horizalign(right)
+			local z = IsUsingWideScreen() and 0.38 or 0.30
+			self:zoom(z)
+			self:shadowlength(1)
+			self:diffuse(color("#66ffcc"))
+			local maxW = (ribbonW * 0.50) / z
+			self:maxwidth(maxW)
+			self:settext("")
+		end,
+	},
+}
+
+chipsContainer[#chipsContainer + 1] = activeFilterBar
+
 -- Update Visual Tabs dynamically when category or filter changes
 local function UpdateVisualTabs(self, params)
 	if not params then return end
 	lastCategoryUIParams = params
+
+	local query = params.filterQuery or ""
+	local filterBar = self:GetChild("ActiveFilterBar")
+	local leftKey = self:GetChild("LeftArrowKeycap")
+	local rightKey = self:GetChild("RightArrowKeycap")
+	local tabsAF = self:GetChild("VisualTabsGroup")
+
+	if #query > 0 then
+		if leftKey then leftKey:visible(false) end
+		if rightKey then rightKey:visible(false) end
+		if tabsAF then tabsAF:visible(false) end
+		if filterBar then
+			filterBar:visible(true)
+			filterBar:playcommand("Set", params)
+		end
+		return
+	else
+		if filterBar then filterBar:visible(false) end
+		if leftKey then leftKey:visible(true) end
+		if rightKey then rightKey:visible(true) end
+		if tabsAF then tabsAF:visible(true) end
+	end
 
 	local catId = params.categoryId
 	local subChips = params.subChips or {}
@@ -371,7 +535,6 @@ local function UpdateVisualTabs(self, params)
 	local totalSongs = params.totalSongs or 0
 	local numChips = #subChips
 
-	local tabsAF = self:GetChild("VisualTabsGroup")
 	if not tabsAF then return end
 
 	-- Hide all tab slots initially
@@ -539,79 +702,6 @@ end
 
 af[#af + 1] = chipsContainer
 
--- -------------------------------------------------------------
--- Section Filter Pill (y = 16, height = 20, spans y = 6..26)
--- Positioned cleanly above Tier 1 Tabs when type-to-filter is active
--- -------------------------------------------------------------
-local filterPill = Def.ActorFrame {
-	Name = "SectionFilterPill",
-	InitCommand = function(self)
-		self:y(16)
-		self:visible(false)
-	end,
-	UpdateCategoryUIMessageCommand = function(self, params)
-		local query = params and params.filterQuery or ""
-		if #query == 0 then
-			self:visible(false)
-			return
-		end
-		self:visible(true)
-		local total = params.songs and #params.songs or 0
-		local unfilTotal = params.unfilteredTotal or total
-		local lbl = self:GetChild("FilterText")
-		local border = self:GetChild("PillBorder")
-
-		if lbl then
-			if total == 0 then
-				if IsUsingWideScreen() then
-					lbl:settext(string.format("FILTER: \"%s\"   (0 of %d matches)   •   [ BackSpace ] Delete   •   [ Esc ] Clear", query, unfilTotal))
-				else
-					lbl:settext(string.format("FILTER: \"%s\" (0/%d) • [Bksp] Del • [Esc] Clear", query, unfilTotal))
-				end
-				lbl:diffuse(color("#ff7777"))
-				if border then border:diffuse(color("#ff4444")):diffusealpha(0.85) end
-			else
-				if IsUsingWideScreen() then
-					lbl:settext(string.format("FILTER: \"%s\"   (%d of %d songs)   •   [ BackSpace ] Delete   •   [ Esc ] Clear", query, total, unfilTotal))
-				else
-					lbl:settext(string.format("FILTER: \"%s\" (%d/%d) • [Bksp] Del • [Esc] Clear", query, total, unfilTotal))
-				end
-				lbl:diffuse(Color.White)
-				if border then border:diffuse(color("#66ffcc")):diffusealpha(0.85) end
-			end
-		end
-	end,
-
-	-- Outer pill border
-	Def.Quad {
-		Name = "PillBorder",
-		InitCommand = function(self)
-			self:zoomto(ribbonW - 16, 20)
-			self:diffuse(color("#66ffcc")):diffusealpha(0.85)
-		end,
-	},
-	-- Inner pill background
-	Def.Quad {
-		Name = "PillBg",
-		InitCommand = function(self)
-			self:zoomto(ribbonW - 18, 18)
-			self:diffuse(color("0.05, 0.07, 0.10, 0.98"))
-		end,
-	},
-	-- Pill text
-	LoadFont("Common Normal") .. {
-		Name = "FilterText",
-		InitCommand = function(self)
-			self:zoom(IsUsingWideScreen() and 0.52 or 0.42)
-			self:maxwidth((ribbonW - 28) / (IsUsingWideScreen() and 0.52 or 0.42))
-			self:diffuse(Color.White)
-			self:shadowlength(1)
-			self:settext("")
-		end,
-	},
-}
-
-af[#af + 1] = filterPill
-
 return af
+
 
